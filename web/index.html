@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Orsat-Decoder</title>
+<link rel="icon" href="icon.svg">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <header id="bar">
+    <div class="brand"><img src="icon.svg" alt=""><span>Orsat-Decoder</span></div>
+
+    <label class="pick" title="Serveur PhantomSDR / Orsat-SDR">
+      <select id="serverSel"></select>
+    </label>
+    <label class="pick" id="rxPick" title="Récepteur" hidden>
+      <select id="rxSel"></select>
+    </label>
+    <span id="conn" class="conn">Connexion…</span>
+
+    <div class="spacer"></div>
+
+    <div class="menu-wrap">
+      <button id="presetBtn" class="btn">Fréquences connues</button>
+      <div id="presetMenu" class="menu" hidden></div>
+    </div>
+    <button id="settingsBtn" class="icon-btn" title="Réglages" aria-label="Réglages">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.4 13a7.6 7.6 0 0 0 0-2l2.1-1.6-2-3.4-2.5 1a7.3 7.3 0 0 0-1.7-1L15 3.3h-4l-.3 2.7a7.3 7.3 0 0 0-1.7 1l-2.5-1-2 3.4L6.6 11a7.6 7.6 0 0 0 0 2l-2.1 1.6 2 3.4 2.5-1a7.3 7.3 0 0 0 1.7 1l.3 2.7h4l.3-2.7a7.3 7.3 0 0 0 1.7-1l2.5 1 2-3.4ZM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Z" transform="translate(-1 0)"/></svg>
+    </button>
+  </header>
+
+  <aside id="modes">
+    <div class="search"><input id="modeSearch" type="search" placeholder="Chercher un mode…" autocomplete="off" spellcheck="false"></div>
+    <nav id="modeList"></nav>
+    <p class="hint" id="placeHint">Choisissez un mode, puis cliquez sur un signal dans le waterfall pour ouvrir un canal.</p>
+  </aside>
+
+  <main id="main">
+    <section id="wfWrap">
+      <canvas id="wf"></canvas>
+      <div id="markers"></div>
+      <div id="wfHover" class="wf-hover"></div>
+      <div class="zoom">
+        <button id="zoomOut" class="icon-btn small" title="Dézoomer">−</button>
+        <button id="zoomIn" class="icon-btn small" title="Zoomer">+</button>
+        <button id="zoomAll" class="icon-btn small" title="Toute la bande">Tout</button>
+      </div>
+      <div id="wfOverlay" class="wf-overlay"><p>Connexion au serveur…</p></div>
+    </section>
+
+    <section id="chanWrap">
+      <div id="chans"></div>
+      <div id="chanEmpty" class="empty-state">
+        <p>Aucun canal ouvert.</p>
+        <p class="sub">Cliquez sur un signal dans le waterfall avec le mode choisi à gauche, ou utilisez « Fréquences connues ».</p>
+      </div>
+    </section>
+  </main>
+</div>
+
+<dialog id="settings" class="sheet">
+  <form method="dialog">
+    <header><h2>Réglages</h2><button class="icon-btn" value="close" aria-label="Fermer">✕</button></header>
+    <h3>Serveurs</h3>
+    <div id="srvList"></div>
+    <button type="button" id="srvAdd" class="btn">Ajouter un serveur</button>
+    <p class="hint">Adresse d'un PhantomSDR-Plus ou d'Orsat-SDR, par exemple <code>http://orsat.ddns.net:8080</code>.</p>
+    <h3>Waterfall</h3>
+    <label class="row">Palette<select id="setPalette">
+      <option value="cadran">Cadran (or)</option><option value="glace">Glace</option>
+      <option value="braise">Braise</option><option value="gris">Niveaux de gris</option></select></label>
+    <label class="row">Contraste<input id="setContrast" type="range" min="0.5" max="2.5" step="0.1" value="1"></label>
+    <label class="row">Plancher<input id="setFloor" type="range" min="-30" max="30" step="1" value="0"></label>
+    <h3>Application</h3>
+    <div class="row-btns"><button type="button" id="quitBtn" class="btn danger">Quitter Orsat-Decoder</button></div>
+  </form>
+</dialog>
+
+<div id="toasts"></div>
+<script src="app.js"></script>
+</body>
+</html>
