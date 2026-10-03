@@ -127,6 +127,8 @@ function addChannel(mode, freq, params) {
     toast(`${fmtKHz(freq)} kHz est hors de la bande de ce récepteur (${fmtKHz(s.basefreq)} à ${fmtKHz(s.basefreq + s.total_bandwidth)} kHz).`, 'error');
     return;
   }
+  if (!s.local && S.chans.size >= 3)
+    toast('Attention : un serveur PhantomSDR-Plus limite en général à 3 auditeurs par adresse (per_ip). Au-delà, le canal peut être refusé. Lancer Orsat-Decoder sur la machine du serveur lève cette limite.', 'error');
   send({ t: 'add', mode, freq, params });
 }
 

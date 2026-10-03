@@ -40,6 +40,54 @@ class FirDecim:
         return out
 
 
+class ToneFinder:
+    """Garde ~1 s d'audio brut et cherche, toutes les `period` s, où se trouve le signal attendu
+    autour d'une fréquence (porteuse seule, ou paire de tonalités FSK). Sert de CAF grossière."""
+
+    def __init__(self, fs, seconds=1.0, period=1.0):
+        self.fs = float(fs)
+        self.n = 1 << int(np.ceil(np.log2(self.fs * seconds)))
+        self.buf = np.zeros(0)
+        self.period = int(self.fs * period)
+        self.count = 0
+
+    def feed(self, x):
+        self.buf = np.concatenate([self.buf, x])[-self.n:]
+        self.count += len(x)
+        if self.count >= self.period and len(self.buf) == self.n:
+            self.count = 0
+            return True
+        return False
+
+    def spectrum(self):
+        sp = np.abs(np.fft.rfft(self.buf * np.hanning(self.n))) ** 2
+        return np.fft.rfftfreq(self.n, 1 / self.fs), sp
+
+    def find(self, center, span, shift=0.0, min_ratio=8.0):
+        """Fréquence centrale du signal dans [center-span, center+span], ou None si rien de net.
+        shift > 0 : on cherche une paire de tonalités espacées de shift Hz."""
+        f, sp = self.spectrum()
+        df = f[1] - f[0]
+        sel = (f >= center - span - shift / 2 - 20) & (f <= center + span + shift / 2 + 20)
+        if not np.any(sel):
+            return None
+        noise = np.median(sp[sel]) + 1e-20
+        cands = np.arange(center - span, center + span + df, df)
+        def power(fc):
+            if shift > 0:
+                return np.interp(fc - shift / 2, f, sp) + np.interp(fc + shift / 2, f, sp)
+            return np.interp(fc, f, sp)
+        # lissage léger : la puissance d'un signal modulé s'étale sur quelques bins
+        k = max(1, int(round(8 / df)))
+        pw = np.array([power(c) for c in cands])
+        pw = np.convolve(pw, np.ones(k) / k, mode="same")
+        i = int(np.argmax(pw))
+        ref = noise * (2 if shift > 0 else 1)
+        if pw[i] < min_ratio * ref:
+            return None
+        return float(cands[i])
+
+
 def lowpass(fs, cutoff, ntaps):
     ntaps = int(ntaps) | 1
     return firwin(ntaps, cutoff, fs=fs)

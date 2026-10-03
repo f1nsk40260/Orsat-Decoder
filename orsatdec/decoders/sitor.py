@@ -44,7 +44,7 @@ class SitorB(Decoder):
         self.demod.set_af(af)
 
     def status(self):
-        return {"af": round(self.af, 1), "snr": round(self.demod.snr(), 1), "quality": round(self.quality, 2),
+        return {"af": round(self.demod.af, 1), "snr": round(self.demod.snr(), 1), "quality": round(self.quality, 2),
                 "sync": self.align is not None}
 
     # -- synchro bit : intégration sur le bit, réajustement sur chaque transition
@@ -102,7 +102,8 @@ class SitorB(Decoder):
             scores.append(valid + 0.5 * phase)
         order = np.argsort(scores)
         best, second = int(order[-1]), scores[order[-2]]
-        self.quality = scores[best]
+        self.quality = min(1.0, max(0.0, float(scores[best]) - 0.5 * 0.0))
+        self.quality = float(np.mean([VALID[v] for v in (hard[best:best + ((len(hard) - best) // 7) * 7].reshape(-1, 7) @ (1 << np.arange(7)))]))
         # cadrage retenu s'il se détache nettement des autres ; on le garde tant qu'il reste plausible
         if scores[best] > 0.45 and scores[best] - second > 0.10:
             start = self.nbits - len(b)

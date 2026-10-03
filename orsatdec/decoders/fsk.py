@@ -6,7 +6,7 @@ sélectifs fréquents en ondes courtes.
 """
 import numpy as np
 
-from ..dsp import Decoder, Mixer, FirDecim, lowpass
+from ..dsp import Decoder, Mixer, FirDecim, lowpass, ToneFinder
 from ..tables import BAUDOT_LTRS, BAUDOT_FIGS, BAUDOT_LTRS_SHIFT, BAUDOT_FIGS_SHIFT
 
 
@@ -26,12 +26,23 @@ class FSKDemod:
         self.mpk = self.spk = 1e-6
         self.level = 0.0
         self.noise = 1e-9
+        self.af0 = self.af = float(af)
+        self.finder = ToneFinder(self.fs, seconds=1.5, period=1.0)
 
     def set_af(self, af):
+        self.af0 = float(af)
+        self._tune(af)
+
+    def _tune(self, af):
+        self.af = float(af)
         self.mark_mix.freq = af + self.shift / 2
         self.space_mix.freq = af - self.shift / 2
 
     def process(self, x):
+        if self.finder.feed(x):
+            fc = self.finder.find(self.af0, 120.0, shift=self.shift, min_ratio=6.0)
+            if fc is not None and abs(fc - self.af) > 6:
+                self._tune(fc)
         m = np.abs(self.fm.process(self.mark_mix.process(x)))
         s = np.abs(self.fsp.process(self.space_mix.process(x)))
         out = np.empty(len(m))
@@ -75,7 +86,7 @@ class RTTY(Decoder):
         self.demod.set_af(af)
 
     def status(self):
-        return {"af": round(self.af, 1), "snr": round(self.demod.snr(), 1), "quality": round(self.good, 2)}
+        return {"af": round(self.demod.af, 1), "snr": round(self.demod.snr(), 1), "quality": round(self.good, 2)}
 
     def process(self, x):
         d = self.demod.process(np.asarray(x, np.float64))

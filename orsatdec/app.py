@@ -91,7 +91,7 @@ class Channel:
 
     def start(self):
         srv = self.app.server
-        self.audio = AudioChannel(srv["url"], self.dial, "USB", rx=self.app.rx, tap=srv.get("tap"),
+        self.audio = AudioChannel(srv["url"], self.dial, "USB", rx=self.app.rx, tap=self.app.tap_token(),
                                   on_pcm=self._on_pcm, on_state=self._on_state, session=self.app.http)
         self.audio.start()
 
@@ -172,6 +172,26 @@ class App:
     def rx(self):
         return self.conf.get("rx")
 
+    def is_local(self):
+        from urllib.parse import urlparse
+        host = urlparse(self.server["url"] if "://" in self.server["url"] else "http://" + self.server["url"]).hostname
+        return host in ("127.0.0.1", "localhost", "::1")
+
+    def tap_token(self):
+        """Sur la machine du serveur, le jeton .tap_token d'Orsat-SDR fait de nos flux des clients
+        internes, comme le client autorun : ils ne comptent pas comme auditeurs."""
+        if self.server.get("tap"):
+            return self.server["tap"]
+        if not self.is_local():
+            return None
+        for d in ("Orsat-SDR", "orsat-sdr", "PhantomSDR-Plus", "PhantomSDR-Plus-FR", "phantomsdr"):
+            f = Path.home() / d / ".tap_token"
+            try:
+                return f.read_text().strip() or None
+            except OSError:
+                continue
+        return None
+
     # ------------------------------------------------------------------ diffusion
     def broadcast(self, msg):
         if not self.clients:
@@ -206,7 +226,8 @@ class App:
 
     def _server_summary(self):
         i = self.wf_info or {}
-        return {"name": self.server.get("name"), "url": self.server.get("url"),
+        return {"name": self.server.get("name"), "url": self.server.get("url"), "local": self.is_local(),
+                "internal": bool(self.tap_token()),
                 "basefreq": i.get("basefreq"), "total_bandwidth": i.get("total_bandwidth"),
                 "rx": i.get("rx"), "rx_name": i.get("rx_name"),
                 "receivers": i.get("receivers") or [], "connected": bool(i)}

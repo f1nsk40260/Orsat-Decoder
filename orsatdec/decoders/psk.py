@@ -30,8 +30,10 @@ class PSK(Decoder):
         self.noise = 1e-9
         self.af0 = float(af)          # fréquence choisie par l'utilisateur ; la CAF reste autour
         self.ferr = 0.0
-        self.capture = max(25.0, self.baud)      # plage d'acquisition autour de la fréquence choisie (Hz)
-        self.hist = np.zeros(0, np.complex128)    # bande de base récente, pour l'acquisition
+        self.capture = max(100.0, 2 * self.baud)   # plage d'acquisition autour de la fréquence choisie (Hz)
+        self.hist = np.zeros(0, np.complex128)    # bande de base large et fixe, pour l'acquisition
+        self.wide_mix = Mixer(af, self.fs)
+        self.wide_fir = FirDecim(lowpass(self.fs, self.capture + self.baud, 2 * self.fs / self.baud), self.D)
         self.nfft = 1 << int(np.ceil(np.log2(self.fs2 * 2)))
         self.since_acq = 0
 
@@ -39,6 +41,7 @@ class PSK(Decoder):
         super().set_af(af)
         self.af0 = float(af)
         self.mix.freq = float(af)
+        self.wide_mix.freq = float(af)
 
     def status(self):
         return {"af": round(self.mix.freq, 1), "quality": round(max(0.0, self.quality), 2),
@@ -54,11 +57,8 @@ class PSK(Decoder):
         sq = self.hist * self.hist
         sq = sq * np.hanning(len(sq))
         sp = np.abs(np.fft.fft(sq, self.nfft * 2)) ** 2
-        f = np.fft.fftfreq(self.nfft * 2, 1 / self.fs2) / 2      # écart de fréquence correspondant
-        off = self.mix.freq - self.af0
-        ok = np.abs(f + off) <= self.capture
-        if not np.any(ok):
-            return
+        f = np.fft.fftfreq(self.nfft * 2, 1 / self.fs2) / 2      # écart par rapport à la fréquence cliquée
+        ok = np.abs(f) <= self.capture
         idx = np.flatnonzero(ok)
         k = idx[np.argmax(sp[idx])]
         cand = f[k] if sp[k] > 30 * np.median(sp[idx]) else None
@@ -66,18 +66,19 @@ class PSK(Decoder):
         prev, self.last_cand = getattr(self, "last_cand", None), cand
         if cand is None or prev is None or abs(cand - prev) > max(1.0, self.baud / 20):
             return
-        if abs(cand) > max(1.5, self.baud / 10):
-            self.mix.freq += cand
+        target = self.af0 + cand
+        if abs(target - self.mix.freq) > max(1.5, self.baud / 10):
+            self.mix.freq = target
             self.buf = self.buf[:0]
             self.pos = 2 * self.sps
-            self.hist = self.hist[:0]
             self.acc = 0j
             self.last_cand = None
 
     def process(self, x):
-        z = self.fir.process(self.mix.process(np.asarray(x, np.float64)))
+        x = np.asarray(x, np.float64)
+        z = self.fir.process(self.mix.process(x))
         self.buf = np.concatenate([self.buf, z])
-        self._acquire(z)
+        self._acquire(self.wide_fir.process(self.wide_mix.process(x)))
         text = []
         sps = self.sps
         while self.pos + 2 < len(self.buf):
@@ -106,7 +107,7 @@ class PSK(Decoder):
             if self.afc and self.quality > 0.3:
                 ferr = rot * self.baud / TAU
                 nf = self.mix.freq + 0.05 * ferr
-                if abs(nf - self.af0) < max(15.0, self.baud * 0.5):
+                if abs(nf - self.af0) < self.capture:
                     self.mix.freq = nf
 
             d = d * np.exp(-1j * rot)          # décision sur la phase corrigée

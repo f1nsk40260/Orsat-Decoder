@@ -1,0 +1,116 @@
+#!/usr/bin/env bash
+# =====================================================================================
+#  Orsat-Decoder — installation sous Linux
+#
+#  Usage :  ./install.sh
+#  Relancer install.sh met à jour Orsat-Decoder en gardant la configuration et les canaux.
+# =====================================================================================
+set -euo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+APPDIR="${ORSAT_DATA:-$HOME/.local/share/orsat-decoder}"
+BINDIR="$HOME/.local/bin"
+DESKDIR="$HOME/.local/share/applications"
+ICONDIR="$HOME/.local/share/icons/hicolor/scalable/apps"
+
+gold=$'\e[33m'; red=$'\e[31m'; dim=$'\e[2m'; bold=$'\e[1m'; off=$'\e[0m'
+step() { echo; echo "${gold}${bold}▸ $*${off}"; }
+info() { echo "  $*"; }
+fail() { echo; echo "${red}${bold}Échec :${off} $*"; exit 1; }
+
+[ "$(id -u)" = "0" ] && fail "lancez install.sh avec votre compte habituel, pas en root (sudo sera demandé au besoin)."
+echo "${bold}Orsat-Decoder${off} — installation"
+
+# -------------------------------------------------------------------------------------
+step "1/5  Paquets système (Python, compilateur C)"
+need=()
+command -v python3 >/dev/null || need+=(python3)
+python3 -c "import venv, ensurepip" 2>/dev/null || need+=(python3-venv)
+command -v cc >/dev/null || command -v gcc >/dev/null || need+=(gcc)
+command -v make >/dev/null || need+=(make)
+if [ ${#need[@]} -gt 0 ]; then
+  info "À installer : ${need[*]}"
+  if command -v apt-get >/dev/null; then
+    sudo apt-get update -q && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q python3 python3-venv python3-pip build-essential
+  elif command -v dnf >/dev/null; then sudo dnf install -y python3 python3-pip gcc make
+  elif command -v pacman >/dev/null; then sudo pacman -S --needed --noconfirm python python-pip base-devel
+  elif command -v zypper >/dev/null; then sudo zypper install -y python3 python3-pip gcc make
+  else fail "installez Python 3 (avec venv), gcc et make, puis relancez."; fi
+else
+  info "Tout est présent ($(python3 --version))."
+fi
+python3 - <<'PY' || fail "Python 3.9 ou plus récent est nécessaire."
+import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)
+PY
+
+# -------------------------------------------------------------------------------------
+step "2/5  Copie du logiciel"
+mkdir -p "$APPDIR"
+rm -rf "$APPDIR/app.new"
+mkdir -p "$APPDIR/app.new"
+cp -a "$HERE/orsatdec" "$HERE/web" "$HERE/native" "$HERE/tests" "$APPDIR/app.new/"
+find "$APPDIR/app.new" -name __pycache__ -prune -exec rm -rf {} +
+rm -rf "$APPDIR/app"
+mv "$APPDIR/app.new" "$APPDIR/app"
+info "Installé dans $APPDIR/app"
+
+# -------------------------------------------------------------------------------------
+step "3/5  Décodeurs natifs (ft8_lib)"
+"$APPDIR/app/native/build.sh" >"$APPDIR/build.log" 2>&1 || { tail -20 "$APPDIR/build.log"; fail "compilation des décodeurs natifs."; }
+info "$(tail -1 "$APPDIR/build.log")"
+
+# -------------------------------------------------------------------------------------
+step "4/5  Environnement Python (numpy, scipy, aiohttp…)"
+if [ ! -x "$APPDIR/venv/bin/python" ]; then
+  python3 -m venv "$APPDIR/venv" || fail "création de l'environnement Python (paquet python3-venv manquant ?)."
+fi
+"$APPDIR/venv/bin/pip" install -q --upgrade pip >/dev/null 2>&1 || true
+"$APPDIR/venv/bin/pip" install -q numpy scipy aiohttp cbor2 zstandard || fail "installation des modules Python (connexion Internet ?)."
+info "Modules installés."
+
+# -------------------------------------------------------------------------------------
+step "5/5  Lanceur, menu et autotest"
+mkdir -p "$BINDIR" "$DESKDIR" "$ICONDIR"
+cat > "$BINDIR/orsat-decoder" <<EOF
+#!/usr/bin/env bash
+# Orsat-Decoder — lanceur
+export ORSAT_DATA="$APPDIR"
+cd "$APPDIR/app"
+case "\${1:-}" in
+  --check) exec "$APPDIR/venv/bin/python" tests/selftest.py ;;
+  --log)   exec \${PAGER:-less} "$APPDIR/orsat-decoder.log" ;;
+esac
+exec "$APPDIR/venv/bin/python" -m orsatdec "\$@"
+EOF
+chmod 755 "$BINDIR/orsat-decoder"
+install -m 755 "$HERE/uninstall.sh" "$APPDIR/uninstall.sh"
+cp "$HERE/web/icon.svg" "$ICONDIR/orsat-decoder.svg"
+cat > "$DESKDIR/orsat-decoder.desktop" <<EOF
+[Desktop Entry]
+Type=Application
+Name=Orsat-Decoder
+GenericName=Décodeur de modes numériques
+Comment=Décodeur multimode pour PhantomSDR / Orsat-SDR
+Exec=$BINDIR/orsat-decoder
+Icon=orsat-decoder
+Terminal=false
+Categories=HamRadio;Network;AudioVideo;
+Keywords=radio;ham;sdr;psk;rtty;cw;navtex;ft8;decoder;phantomsdr;
+StartupWMClass=orsat-decoder
+EOF
+update-desktop-database "$DESKDIR" >/dev/null 2>&1 || true
+gtk-update-icon-cache -q "$HOME/.local/share/icons/hicolor" >/dev/null 2>&1 || true
+
+if "$BINDIR/orsat-decoder" --check; then
+  echo
+  echo "${gold}${bold}Installation terminée.${off}"
+  echo "  Lancez ${bold}Orsat-Decoder${off} depuis le menu des applications, ou tapez :  ${bold}orsat-decoder${off}"
+  echo "  Le serveur se choisit en haut à gauche ; adresses modifiables dans les réglages."
+  echo "  Désinstallation :  $APPDIR/uninstall.sh"
+  case ":$PATH:" in *":$BINDIR:"*) ;; *) echo "  ${dim}Note : $BINDIR n'est pas dans votre PATH ; utilisez le menu ou ouvrez un nouveau terminal.${off}";; esac
+  if ! command -v chromium >/dev/null && ! command -v chromium-browser >/dev/null && ! command -v google-chrome >/dev/null && ! command -v brave-browser >/dev/null; then
+    echo "  ${dim}Astuce : avec Chromium installé, l'interface s'ouvre dans sa propre fenêtre et Orsat-Decoder s'arrête à sa fermeture.${off}"
+  fi
+else
+  fail "l'autotest des décodeurs a échoué (détails ci-dessus)."
+fi

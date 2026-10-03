@@ -8,7 +8,7 @@ from collections import deque
 
 import numpy as np
 
-from ..dsp import Decoder, Mixer, FirDecim, lowpass
+from ..dsp import Decoder, Mixer, FirDecim, lowpass, ToneFinder
 from ..tables import MORSE
 
 
@@ -35,17 +35,25 @@ class CW(Decoder):
         self.floor = self.top = 1e-6
         self.n = 0
         self.squelch = squelch
+        self.af0 = float(af)
+        self.finder = ToneFinder(self.fs, seconds=1.0, period=1.0)
 
     def set_af(self, af):
         super().set_af(af)
+        self.af0 = float(af)
         self.mix.freq = float(af)
 
     def status(self):
         snr = 20 * np.log10(max(self.top, 1e-9) / max(self.floor, 1e-9))
-        return {"af": round(self.af, 1), "wpm": round(1.2 * self.rate / self.dot, 1), "snr": round(snr, 1)}
+        return {"af": round(self.mix.freq, 1), "wpm": round(1.2 * self.rate / self.dot, 1), "snr": round(snr, 1)}
 
     def process(self, x):
-        e = np.abs(self.fir.process(self.mix.process(np.asarray(x, np.float64))))
+        x = np.asarray(x, np.float64)
+        if self.finder.feed(x):
+            fc = self.finder.find(self.af0, 200.0, min_ratio=20.0)
+            if fc is not None and abs(fc - self.mix.freq) > 8:
+                self.mix.freq = fc                       # la porteuse est ailleurs : on s'y cale
+        e = np.abs(self.fir.process(self.mix.process(x)))
         out = []
         for v in e:
             # moyenne glissante sur ~1/3 de point
