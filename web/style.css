@@ -169,3 +169,6 @@ dialog code { color: var(--text); }
 .marker.active .band { opacity: .3; }
 .marker.active .edge { opacity: 1; border-left-style: solid; }
 .chan { height: 360px; }
+
+.chan .state.bad { color: var(--bad); font-weight: 700; }
+.icon-btn.listen.on { color: #10161d; background: var(--c); }

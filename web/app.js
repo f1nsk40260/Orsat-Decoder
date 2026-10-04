@@ -30,7 +30,7 @@ function connect() {
   ws.onmessage = ev => {
     if (typeof ev.data !== 'string') {
       const k = new DataView(ev.data).getUint8(0);
-      return k === 2 ? onSpecFrame(ev.data) : onWfFrame(ev.data);
+      return k === 2 ? onSpecFrame(ev.data) : k === 3 ? onListenFrame(ev.data) : onWfFrame(ev.data);
     }
     let m; try { m = JSON.parse(ev.data); } catch { return; }
     (H[m.t] || (() => {}))(m);
@@ -210,6 +210,7 @@ function upsertChan(d) {
 }
 function removeChanCard(id) {
   const c = S.chans.get(id); if (!c) return;
+  if (S.listen === id) { S.listen = null; send({ t: 'listen', ch: null }); }
   c.card.remove(); S.chans.delete(id); placeMarkers();
   $('#chanEmpty').hidden = S.chans.size > 0;
 }
@@ -221,6 +222,8 @@ function buildCard(c) {
     if (!isNaN(v)) send({ t: 'retune', ch: c.id, freq: audioOnly() ? v : v * 1000 });
   };
   freq.onkeydown = e => { if (e.key === 'Enter') freq.blur(); };
+  const listen = el('button', { class: 'icon-btn small listen', type: 'button', title: 'Écouter l\'audio reçu par ce canal', text: 'Écouter' });
+  listen.onclick = () => toggleListen(c);
   const pause = el('button', { class: 'icon-btn small', type: 'button', title: 'Pause' });
   pause.onclick = () => send({ t: 'pause', ch: c.id, paused: !c.paused });
   const clear = el('button', { class: 'icon-btn small', type: 'button', title: 'Effacer le texte', text: 'Effacer' });
@@ -243,9 +246,9 @@ function buildCard(c) {
   const specWrap = el('div', { class: 'spec-wrap' }, spec, el('div', { class: 'spec-read' }));
   const card = el('article', { class: 'chan', style: `--c:${c.color}` },
     el('header', {}, el('span', { class: 'mname', text: m.label }), freq, el('span', { class: 'unit' }),
-      el('span', { class: 'state' }), el('div', { class: 'tools' }, pause, clear, save, close)),
+      el('span', { class: 'state' }), el('div', { class: 'tools' }, listen, pause, clear, save, close)),
     el('div', { class: 'sub' }, params, meters), specWrap, out);
-  Object.assign(c, { card, out, freqIn: freq, meters, pauseBtn: pause, stateEl: card.querySelector('.state'),
+  Object.assign(c, { card, out, freqIn: freq, meters, pauseBtn: pause, listenBtn: listen, stateEl: card.querySelector('.state'),
     spec, specRead: specWrap.querySelector('.spec-read') });
   card.addEventListener('mousedown', () => setActive(c.id));
   spec.addEventListener('click', e => {
@@ -259,6 +262,39 @@ function buildCard(c) {
   freq.addEventListener('wheel', e => { e.preventDefault(); setActive(c.id); wheelTune(c, e); }, { passive: false });
   $('#chans').prepend(card);
   setActive(c.id);
+}
+
+// ------------------------------------------------------------------ écoute d'un canal
+const AU = { ctx: null, gain: null, t: 0 };
+function toggleListen(c) {
+  S.listen = S.listen === c.id ? null : c.id;
+  send({ t: 'listen', ch: S.listen });
+  if (S.listen) {
+    if (!AU.ctx) {
+      AU.ctx = new AudioContext();
+      AU.gain = AU.ctx.createGain(); AU.gain.gain.value = 1; AU.gain.connect(AU.ctx.destination);
+    }
+    AU.ctx.resume(); AU.t = 0; AU.peak = 0.05;
+  }
+  for (const x of S.chans.values()) refreshCard(x);
+}
+function onListenFrame(buf) {
+  if (!AU.ctx || !S.listen) return;
+  const dv = new DataView(buf), fs = dv.getUint32(9, true);
+  const i16 = new Int16Array(buf.slice(13));
+  if (!i16.length) return;
+  const f32 = new Float32Array(i16.length);
+  let pk = 0;
+  for (let i = 0; i < i16.length; i++) { f32[i] = i16[i] / 32768; pk = Math.max(pk, Math.abs(f32[i])); }
+  // gain automatique doux : l'audio des serveurs arrive souvent très bas
+  AU.peak = Math.max(pk, AU.peak * 0.995);
+  AU.gain.gain.setTargetAtTime(Math.min(40, 0.5 / (AU.peak + 1e-4)), AU.ctx.currentTime, 0.3);
+  const b = AU.ctx.createBuffer(1, f32.length, fs);
+  b.copyToChannel(f32, 0);
+  const src = AU.ctx.createBufferSource(); src.buffer = b; src.connect(AU.gain);
+  const now = AU.ctx.currentTime;
+  if (AU.t < now + 0.05 || AU.t > now + 1.0) AU.t = now + 0.25;    // tampon de 250 ms
+  src.start(AU.t); AU.t += b.duration;
 }
 
 // ------------------------------------------------------------------ accord fin (molette, mini-spectre)
@@ -334,7 +370,9 @@ function drawSpec(c) {
 function refreshCard(c) {
   if (document.activeElement !== c.freqIn) c.freqIn.value = audioOnly() ? Math.round(c.freq) : fmtKHz(c.freq);
   c.card.querySelector('.unit').textContent = audioOnly() ? 'Hz audio' : 'kHz';
-  c.stateEl.textContent = c.paused ? 'en pause' : c.state;
+  c.stateEl.textContent = c.paused ? 'en pause' : c.state + (c.error ? ` : ${c.error}` : '');
+  c.stateEl.classList.toggle('bad', !c.paused && (c.state === "pas d'audio reçu" || c.state === 'erreur'));
+  if (c.listenBtn) c.listenBtn.classList.toggle('on', S.listen === c.id);
   c.pauseBtn.textContent = c.paused ? 'Reprendre' : 'Pause';
   c.card.classList.toggle('paused', !!c.paused);
   for (const [key, [sel, p]] of Object.entries(c.paramSel || {})) {
@@ -344,6 +382,7 @@ function refreshCard(c) {
 }
 function updateStat(c, s) {
   const parts = [];
+  if (s.dbfs != null && isFinite(s.dbfs)) parts.push(`audio <b>${Math.round(s.dbfs)} dBFS</b>`);
   if (s.snr != null && isFinite(s.snr)) parts.push(`S/B <b>${Math.round(s.snr)} dB</b>`);
   if (s.quality != null) parts.push(`qualité <b>${Math.round(s.quality * 100)} %</b>`);
   if (s.wpm != null) parts.push(`<b>${Math.round(s.wpm)}</b> mpm`);

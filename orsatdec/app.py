@@ -100,6 +100,9 @@ class Channel:
         self._status_t = 0
         self.ring = np.zeros(4096, np.float32)   # audio récent, pour le mini-spectre du canal
         self._spec_n = 0
+        self.last_audio = 0.0                    # instant du dernier bloc audio reçu
+        self.ms2 = 0.0                           # puissance audio moyenne (niveau en dBFS)
+        self.n_recv = 0                          # échantillons reçus depuis le dernier état
 
     def describe(self):
         src = self.app.src
@@ -164,6 +167,15 @@ class Channel:
 
     def feed(self, pcm, fs):
         """Appelé depuis la boucle principale ou un fil de décodage audio (FLAC)."""
+        self.last_audio = time.time()
+        self.n_recv += len(pcm)
+        if len(pcm):
+            self.ms2 = 0.8 * self.ms2 + 0.2 * float(np.mean(pcm * pcm))
+        if self.app.listen == self.id and self.app.clients:
+            # écoute : l'audio du canal part vers l'interface (int16, à sa fréquence d'origine)
+            pkt = struct.pack("<B8sI", 3, self.id.encode()[:8].ljust(8), int(fs)) + \
+                (np.clip(pcm, -1, 1) * 32767).astype("<i2").tobytes()
+            self.app.loop.call_soon_threadsafe(self.app.broadcast, pkt)
         if self.paused:
             return
         if self.decoder is None or fs != self.fs:
@@ -198,6 +210,7 @@ class Channel:
         if now - self._status_t > 0.5 and dec is self.decoder:
             self._status_t = now
             st = {k: _num(v) for k, v in dec.status().items()}
+            st["dbfs"] = round(10 * np.log10(self.ms2 + 1e-12), 1)
             self.app.broadcast({"t": "cstat", "ch": self.id, **st})
 
     def stop(self):
@@ -216,6 +229,23 @@ class App:
         self.quit = asyncio.Event()
         self.had_client = False
         self.last_client = time.time()
+        self.listen = None                       # canal écouté dans l'interface
+
+    async def audio_watch(self):
+        """Signale les canaux qui ne reçoivent plus d'audio (serveur muet, connexion refusée…)."""
+        while True:
+            await asyncio.sleep(2)
+            now = time.time()
+            for ch in list(self.channels.values()):
+                if ch.paused:
+                    continue
+                silent = now - ch.last_audio > 5
+                if silent and ch.state == "écoute":
+                    ch.state = "pas d'audio reçu"
+                    self.chan_update(ch)
+                elif not silent and ch.state == "pas d'audio reçu":
+                    ch.state = "écoute"
+                    self.chan_update(ch)
 
     # ------------------------------------------------------------------ diffusion
     def broadcast(self, msg):
@@ -350,6 +380,8 @@ class App:
                 ch.reset_decoder()
                 self.chan_update(ch)
                 self._save_channels()
+        elif t == "listen":
+            self.listen = m.get("ch") or None
         elif t == "view":
             await src.set_view(float(m["f0"]), float(m["f1"]))
         elif t == "qsy":
@@ -489,7 +521,7 @@ async def main_async(args):
         return
     log.info("Orsat-Decoder %s : %s", __version__, url)
     await app.connect_source()
-    tasks = [asyncio.create_task(app.idle_watch())]
+    tasks = [asyncio.create_task(app.idle_watch()), asyncio.create_task(app.audio_watch())]
     browser = open_window(url, args)
     if browser is not None and "--app=" in " ".join(map(str, browser.args)):
         async def wait_browser():
@@ -514,8 +546,13 @@ def main():
     ap.add_argument("--lan", action="store_true", help="interface accessible depuis le réseau local")
     ap.add_argument("--no-browser", action="store_true", help="ne pas ouvrir de fenêtre")
     ap.add_argument("--no-autoquit", action="store_true", help="ne pas s'arrêter quand la fenêtre est fermée")
+    ap.add_argument("--probe", nargs="+", metavar=("ADRESSE", "FREQ_KHZ"),
+                    help="diagnostic : se connecte à un serveur PhantomSDR, mesure l'audio reçu et l'enregistre")
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args()
+    if args.probe:
+        from .probe import probe
+        raise SystemExit(asyncio.run(probe(args.probe[0], float(args.probe[1]) * 1000 if len(args.probe) > 1 else None)))
     DATA.mkdir(parents=True, exist_ok=True)
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
                         format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S",

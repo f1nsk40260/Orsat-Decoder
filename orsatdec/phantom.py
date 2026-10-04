@@ -24,7 +24,10 @@ log = logging.getLogger("orsat.phantom")
 SPANS = {"USB": (0, 3000), "LSB": (-3000, 0), "AM": (-5000, 5000), "FM": (-6000, 6000), "CW": (0, 3000)}
 
 
-def ws_url(server, path, rx=None, tap=None):
+CLIENT_VERSION = 2          # marqueur ?v= attendu par les serveurs qui imposent min_client_version
+
+
+def ws_url(server, path, rx=None, tap=None, version=None):
     base = server.rstrip("/")
     if base.startswith("http://"):
         base = "ws://" + base[7:]
@@ -37,6 +40,8 @@ def ws_url(server, path, rx=None, tap=None):
         q["rx"] = rx
     if tap:
         q["tap"] = tap
+    if version:
+        q["v"] = version
     return f"{base}{path}" + (("?" + urlencode(q)) if q else "")
 
 
@@ -56,6 +61,9 @@ class AudioChannel:
         self.ask_pcm = ask_pcm
         self.codec = None              # codec effectivement reçu : pcm, flac ou opus
         self._dec = None
+        self.with_version = False      # passe à True si le serveur exige ?v= (min_client_version)
+        self.packets = 0               # paquets audio reçus (diagnostic)
+        self.last_close = None
         self.ws = None
         self._session = session
         self._own_session = session is None
@@ -154,11 +162,18 @@ class AudioChannel:
         delay = 1.0
         while not self._closing:
             try:
-                url = ws_url(self.server, "/audio", self.rx, self.tap)
+                # Comme le client web : /audio d'abord ; ?v= seulement si le serveur le demande
+                # (les serveurs anciens ne reconnaissent pas /audio?v=…).
+                url = ws_url(self.server, "/audio", self.rx, self.tap, CLIENT_VERSION if self.with_version else None)
                 async with self._session.ws_connect(url, heartbeat=20, max_msg_size=0) as ws:
                     self.ws = ws
                     got_info = False
-                    async for msg in ws:
+                    close_code, close_reason = None, ""
+                    while True:
+                        msg = await ws.receive()
+                        if msg.type == aiohttp.WSMsgType.CLOSE:
+                            close_code, close_reason = msg.data, str(msg.extra or "")
+                            break
                         if msg.type == aiohttp.WSMsgType.TEXT and not got_info:
                             self.info = json.loads(msg.data)
                             self.sample_rate = self.info.get("audio_max_sps")
@@ -181,9 +196,20 @@ class AudioChannel:
                             data = pkt.get("data")
                             if not data:
                                 continue
+                            self.packets += 1
                             self._audio(pkt.get("codec"), bytes(data))
-                        elif msg.type in (aiohttp.WSMsgType.CLOSED, aiohttp.WSMsgType.ERROR):
+                        elif msg.type in (aiohttp.WSMsgType.CLOSED, aiohttp.WSMsgType.CLOSING, aiohttp.WSMsgType.ERROR):
                             break
+                    code, reason = close_code or ws.close_code, close_reason
+                    self.last_close = (code, reason)
+                    if code == 4003 and "out of date" in reason and not self.with_version:
+                        log.info("audio %s : le serveur exige ?v=%d, nouvelle tentative", self.server, CLIENT_VERSION)
+                        self.with_version = True
+                        delay = 0.2
+                    elif code and code >= 4000:
+                        msg_txt = reason or f"code {code}"
+                        log.warning("audio %s refusé : %s", self.server, msg_txt)
+                        self.on_state("error", {"error": f"refusé par le serveur : {msg_txt}"})
             except asyncio.CancelledError:
                 return
             except Exception as e:

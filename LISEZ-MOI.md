@@ -48,7 +48,7 @@ Dans le waterfall :
 
 Chaque carte de canal a un **mini-spectre** très résolu (environ 1 Hz par pixel), centré sur le décodeur. Le trait de couleur marque la fréquence demandée, le pointillé blanc l'endroit où le décodeur s'est calé. Cliquez sur le signal, ou tournez la molette sur le mini-spectre ou sur la fréquence, pour un accord précis. Les petits déplacements se font dans l'audio déjà reçu, sans coupure. La carte active (la dernière touchée) est entourée de sa couleur.
 
-Dans une carte de canal : fréquence modifiable au clavier, paramètres du mode, pause, enregistrement du texte.
+Dans une carte de canal : fréquence modifiable au clavier, paramètres du mode, pause, enregistrement du texte, et bouton **Écouter** pour entendre l'audio que reçoit ce décodeur. La ligne du bas affiche le niveau audio reçu (dBFS). Si rien n'arrive pendant 5 s, la carte passe en rouge « pas d'audio reçu » et indique la raison donnée par le serveur.
 
 | Commande | Effet |
 |---|---|
@@ -56,6 +56,9 @@ Dans une carte de canal : fréquence modifiable au clavier, paramètres du mode,
 | `orsat-decoder --check` | autotest des décodeurs (sans serveur) |
 | `orsat-decoder --lan` | interface accessible depuis le réseau local (`http://ip:8074/`) |
 | `orsat-decoder --log` | journal de la dernière session |
+| `orsat-decoder --probe URL FREQ_kHz` | diagnostic de connexion : ce que le serveur envoie, niveau, enregistrement de 12 s dans `~/orsat-probe.wav` |
+
+Les serveurs Orsat-SDR récents refusent les clients qui ne déclarent pas leur version (`min_client_version`). Orsat-Decoder la déclare (`?v=2`) automatiquement quand le serveur l'exige.
 
 ## Modes du jalon 1
 

@@ -183,7 +183,7 @@ class PhantomSource(Source):
             ch.set_state("écoute", codec=self.codec)
             self.changed()
         elif state == "connected":
-            ch.set_state("écoute")
+            ch.set_state("écoute", error=None)
         elif state == "reconnecting":
             ch.set_state("reconnexion")
         elif state == "error":
