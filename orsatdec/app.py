@@ -1,8 +1,8 @@
-"""Orsat-Decoder : serveur local (aiohttp) entre le serveur PhantomSDR / Orsat-SDR et l'interface web.
+"""Orsat-Decoder : serveur local (aiohttp) entre une source de signal et l'interface web.
 
-- un flux waterfall vers le serveur choisi, relayé à l'interface en trames binaires ;
-- un flux audio par canal de décodage, chacun avec son décodeur dans son propre fil d'exécution ;
-- configuration et canaux mémorisés dans ~/.config/orsat-decoder/config.json.
+Sources : serveur PhantomSDR / Orsat-SDR, TCI (AetherSDR…), entrée audio PipeWire (+ CAT rigctld).
+Chaque canal = un décodeur dans son propre fil d'exécution.
+Configuration et canaux mémorisés dans ~/.config/orsat-decoder/config.json.
 """
 import argparse
 import asyncio
@@ -13,7 +13,6 @@ import shutil
 import signal
 import struct
 import subprocess
-import sys
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -24,7 +23,7 @@ from aiohttp import web, WSMsgType
 
 from . import __version__
 from .modes import BY_ID, public_catalog, default_params, bandwidth
-from .phantom import AudioChannel, Waterfall
+from .sources import make_source, list_audio_inputs, TYPES
 
 HERE = Path(__file__).resolve().parent
 WEB = HERE.parent / "web"
@@ -33,29 +32,42 @@ CONF_FILE = CONF_DIR / "config.json"
 DATA = Path(os.environ.get("ORSAT_DATA", Path.home() / ".local/share/orsat-decoder"))
 log = logging.getLogger("orsat")
 
-DEFAULT_CONF = {
-    "servers": [
-        {"name": "ORSAT", "url": "http://orsat.ddns.net:8080"},
-        {"name": "Orsat-SDR local", "url": "http://127.0.0.1:9002"},
-    ],
-    "server": 0,
-    "rx": None,
-    "channels": [],
-    "ui": {},
-}
+DEFAULT_SOURCES = [
+    {"id": "orsat", "type": "phantom", "name": "ORSAT", "url": "http://orsat.ddns.net:8080"},
+    {"id": "local", "type": "phantom", "name": "Orsat-SDR local", "url": "http://127.0.0.1:9002"},
+    {"id": "aether", "type": "tci", "name": "AetherSDR (TCI)", "url": "ws://127.0.0.1:50001", "trx": 0},
+    {"id": "carte", "type": "audio", "name": "Entrée audio", "device": "", "rigctl": ""},
+]
 
 
 def load_conf():
     try:
         c = json.loads(CONF_FILE.read_text())
-        return {**DEFAULT_CONF, **c}
     except Exception:
-        return json.loads(json.dumps(DEFAULT_CONF))
+        c = {}
+    if "sources" not in c:
+        # ancienne configuration : liste de serveurs PhantomSDR
+        olds = c.get("servers")
+        if olds:
+            c["sources"] = [{"id": f"srv{i}", "type": "phantom", "name": s.get("name") or s.get("url"),
+                             "url": s.get("url")} for i, s in enumerate(olds)] + DEFAULT_SOURCES[2:]
+            c["source"] = f"srv{c.get('server', 0)}"
+            by_url = {s["url"]: s["id"] for s in c["sources"] if s.get("url")}
+            for ch in c.get("channels", []):
+                if "server" in ch and "source" not in ch:
+                    ch["source"] = by_url.get(ch.pop("server"))
+        else:
+            c["sources"] = json.loads(json.dumps(DEFAULT_SOURCES))
+    c.setdefault("source", c["sources"][0]["id"])
+    c.setdefault("channels", [])
+    c.setdefault("ui", {})
+    return c
 
 
 def save_conf(c):
     try:
         CONF_DIR.mkdir(parents=True, exist_ok=True)
+        c = {k: v for k, v in c.items() if k not in ("servers", "server", "rx")}
         tmp = CONF_FILE.with_suffix(".tmp")
         tmp.write_text(json.dumps(c, indent=2, ensure_ascii=False))
         tmp.replace(CONF_FILE)
@@ -63,62 +75,114 @@ def save_conf(c):
         log.warning("configuration non enregistrée : %s", e)
 
 
-class Channel:
-    """Un canal = une fréquence + un mode + un décodeur, alimenté par son propre flux audio."""
+def _num(v):
+    return float(v) if isinstance(v, (np.floating, np.integer)) else v
 
-    def __init__(self, app, cid, mode_id, freq, params=None, paused=False):
+
+class Channel:
+    """Un canal = un mode + une fréquence + un décodeur. L'audio arrive par feed(pcm, fs)."""
+
+    def __init__(self, app, cid, mode_id, freq=0.0, af=None, params=None, paused=False):
         self.app, self.id = app, cid
         self.mode = BY_ID[mode_id]
         self.params = {**default_params(self.mode), **(params or {})}
-        self.freq = float(freq)              # fréquence du signal (ou cadran pour FT8/FT4)
+        self.freq = float(freq)              # source PhantomSDR : fréquence du signal (Hz)
+        self.dial = None                     # source PhantomSDR : fréquence de la porteuse BLU demandée au serveur
+        self.af = float(af if af is not None else (0 if self.mode.get("whole") else self.mode["af"]))
         self.paused = paused
         self.decoder = None
+        self.fs = None
         self.state = "connexion"
+        self.extra = {}
         self.level = 0.0
         self.exec = ThreadPoolExecutor(max_workers=1, thread_name_prefix=f"ch{cid}")
-        self.audio = None
-        self.history = []                    # derniers événements, rejoués à une interface qui se connecte
+        self.history = []
         self._status_t = 0
-
-    @property
-    def dial(self):
-        return self.freq - self.mode["af"]
+        self.ring = np.zeros(4096, np.float32)   # audio récent, pour le mini-spectre du canal
+        self._spec_n = 0
 
     def describe(self):
-        return {"id": self.id, "mode": self.mode["id"], "freq": self.freq, "params": self.params,
-                "paused": self.paused, "state": self.state, "bw": bandwidth(self.mode, self.params),
-                "af": self.mode["af"]}
+        src = self.app.src
+        return {"id": self.id, "mode": self.mode["id"], "freq": src.chan_freq(self) if src else self.freq,
+                "params": self.params, "paused": self.paused, "state": self.state,
+                "bw": bandwidth(self.mode, self.params), "af": self.af, **self.extra}
 
-    def start(self):
-        srv = self.app.server
-        self.audio = AudioChannel(srv["url"], self.dial, "USB", rx=self.app.rx, tap=self.app.tap_token(),
-                                  on_pcm=self._on_pcm, on_state=self._on_state, session=self.app.http)
-        self.audio.start()
+    def set_state(self, state, **extra):
+        self.state = state
+        self.extra.update(extra)
+        self.app.loop.call_soon_threadsafe(self.app.chan_update, self)
 
-    async def stop(self):
-        if self.audio:
-            await self.audio.close()
-        self.exec.shutdown(wait=False, cancel_futures=True)
+    def reset_decoder(self):
+        self.decoder = None
 
-    def _on_state(self, state, info=None):
-        if state == "connected":
-            fs = info.get("audio_max_sps", 12000)
-            self.decoder = self.mode["make"](fs, self.mode["af"] or 1500, self.params)
-            self.state = "écoute"
-        elif state == "reconnecting":
-            self.state = "reconnexion"
-        elif state == "error":
-            self.state = "erreur"
-        self.app.broadcast({"t": "chan", **self.describe()})
-
-    def _on_pcm(self, pcm):
-        if self.paused or self.decoder is None:
+    def move_decoder(self, af):
+        """Petit réaccord : le décodeur se déplace dans l'audio déjà reçu, sans être recréé."""
+        dec = self.decoder
+        if dec is None:
             return
-        self.level = 0.9 * self.level + 0.1 * float(np.sqrt(np.mean(pcm * pcm)) if len(pcm) else 0)
-        fut = self.exec.submit(self.decoder.process, pcm)
-        fut.add_done_callback(lambda f: self.app.loop.call_soon_threadsafe(self._done, f))
+        try:
+            self.exec.submit(dec.set_af, float(af))
+        except RuntimeError:
+            pass
 
-    def _done(self, fut):
+    def _spectrum(self, pcm, fs):
+        """Mini-spectre du canal (≈5 par seconde), centré sur le décodeur, très résolu."""
+        n = len(pcm)
+        r = self.ring
+        if n >= len(r):
+            r[:] = pcm[-len(r):]
+        else:
+            r[:-n] = r[n:]
+            r[-n:] = pcm
+        self._spec_n += n
+        if self._spec_n < fs / 5 or not self.app.clients:
+            return
+        self._spec_n = 0
+        src = self.app.src
+        if src is None:
+            return
+        af = src.decoder_af(self)
+        if self.mode.get("whole"):
+            a0, a1 = 100.0, 3100.0
+        else:
+            half = max(400.0, 3 * bandwidth(self.mode, self.params))
+            a0, a1 = max(0.0, af - half), min(fs / 2, af + half)
+        win = np.hanning(len(r))
+        sp = (np.abs(np.fft.rfft(r * win)) / win.sum()) ** 2       # puissance normalisée (pleine échelle = 0 dB)
+        f = np.fft.rfftfreq(len(r), 1 / fs)
+        sel = (f >= a0) & (f <= a1)
+        v = 10 * np.log10(sp[sel] + 1e-12)
+        m = 300                                    # au plus 300 points
+        if len(v) > m:
+            v = v[: len(v) // (len(v) // m) * (len(v) // m)].reshape(-1, len(v) // m).max(axis=1)
+        v = np.clip((v + 140) * 1.8, 0, 255).astype(np.uint8)
+        base = src.chan_freq(self) - af            # fréquence affichée de l'audio 0 Hz
+        dec = self.decoder
+        mk = base + float(dec.status().get("af", af)) if dec is not None and not self.mode.get("whole") else base + af
+        pkt = struct.pack("<B8sddd", 2, self.id.encode()[:8].ljust(8), base + a0, base + a1, mk) + v.tobytes()
+        self.app.loop.call_soon_threadsafe(self.app.broadcast, pkt)
+
+    def feed(self, pcm, fs):
+        """Appelé depuis la boucle principale ou un fil de décodage audio (FLAC)."""
+        if self.paused:
+            return
+        if self.decoder is None or fs != self.fs:
+            self.fs = fs
+            self.decoder = self.mode["make"](fs, self.app.src.decoder_af(self), self.params)
+            if self.state in ("connexion", "reconnexion"):
+                self.set_state("écoute")
+        try:
+            self._spectrum(pcm, fs)
+        except Exception as e:
+            log.debug("spectre canal : %s", e)
+        dec = self.decoder
+        try:
+            fut = self.exec.submit(dec.process, pcm)
+        except RuntimeError:                      # canal fermé pendant qu'un bloc audio arrivait
+            return
+        fut.add_done_callback(lambda f: self.app.loop.call_soon_threadsafe(self._done, f, dec))
+
+    def _done(self, fut, dec):
         try:
             events = fut.result()
         except Exception as e:
@@ -131,22 +195,13 @@ class Channel:
                 del self.history[:100]
             self.app.broadcast(ev)
         now = time.time()
-        if now - self._status_t > 0.5 and self.decoder is not None:
+        if now - self._status_t > 0.5 and dec is self.decoder:
             self._status_t = now
-            st = {k: (float(v) if isinstance(v, (np.floating,)) else v) for k, v in self.decoder.status().items()}
-            self.app.broadcast({"t": "cstat", "ch": self.id, "level": round(self.level, 4), **st})
+            st = {k: _num(v) for k, v in dec.status().items()}
+            self.app.broadcast({"t": "cstat", "ch": self.id, **st})
 
-    async def retune(self, freq=None, params=None):
-        if params is not None:
-            self.params.update(params)
-            self.decoder = None
-        if freq is not None:
-            self.freq = float(freq)
-        if self.audio and self.audio.info:
-            fs = self.audio.info.get("audio_max_sps", 12000)
-            if params is not None:
-                self.decoder = self.mode["make"](fs, self.mode["af"] or 1500, self.params)
-            await self.audio.retune(self.dial)
+    def stop(self):
+        self.exec.shutdown(wait=False, cancel_futures=True)
 
 
 class App:
@@ -155,48 +210,18 @@ class App:
         self.conf = load_conf()
         self.clients = set()
         self.channels = {}
-        self.waterfall = None
-        self.wf_info = None
+        self.src = None
         self.http = None
         self.loop = None
         self.quit = asyncio.Event()
         self.had_client = False
         self.last_client = time.time()
 
-    @property
-    def server(self):
-        s = self.conf["servers"]
-        return s[min(self.conf.get("server", 0), len(s) - 1)]
-
-    @property
-    def rx(self):
-        return self.conf.get("rx")
-
-    def is_local(self):
-        from urllib.parse import urlparse
-        host = urlparse(self.server["url"] if "://" in self.server["url"] else "http://" + self.server["url"]).hostname
-        return host in ("127.0.0.1", "localhost", "::1")
-
-    def tap_token(self):
-        """Sur la machine du serveur, le jeton .tap_token d'Orsat-SDR fait de nos flux des clients
-        internes, comme le client autorun : ils ne comptent pas comme auditeurs."""
-        if self.server.get("tap"):
-            return self.server["tap"]
-        if not self.is_local():
-            return None
-        for d in ("Orsat-SDR", "orsat-sdr", "PhantomSDR-Plus", "PhantomSDR-Plus-FR", "phantomsdr"):
-            f = Path.home() / d / ".tap_token"
-            try:
-                return f.read_text().strip() or None
-            except OSError:
-                continue
-        return None
-
     # ------------------------------------------------------------------ diffusion
     def broadcast(self, msg):
         if not self.clients:
             return
-        data = json.dumps(msg, ensure_ascii=False, default=float)
+        data = msg if isinstance(msg, bytes) else json.dumps(msg, ensure_ascii=False, default=_num)
         for ws in list(self.clients):
             if not ws.closed:
                 asyncio.ensure_future(self._send(ws, data))
@@ -211,57 +236,68 @@ class App:
         except Exception:
             pass
 
-    def _wf_line(self, d):
+    def wf_line(self, d):
         if not self.clients:
             return
-        b = np.clip(d["bins"], -128, 127).astype(np.int16) + 128
-        payload = struct.pack("<Bdd", 1, d["freq0"], d["freq1"]) + b.astype(np.uint8).tobytes()
-        for ws in list(self.clients):
-            if not ws.closed:
-                asyncio.ensure_future(self._send(ws, payload))
+        if d.get("raw"):
+            b = np.asarray(d["bins"], np.uint8)
+        else:
+            b = (np.clip(d["bins"], -128, 127).astype(np.int16) + 128).astype(np.uint8)
+        self.broadcast(struct.pack("<Bdd", 1, d["freq0"], d["freq1"]) + b.tobytes())
 
-    def _wf_info(self, info):
-        self.wf_info = info
-        self.broadcast({"t": "server", "info": self._server_summary()})
+    def source_changed(self, src):
+        if src is self.src:
+            self.broadcast({"t": "source", "info": src.summary()})
 
-    def _server_summary(self):
-        i = self.wf_info or {}
-        return {"name": self.server.get("name"), "url": self.server.get("url"), "local": self.is_local(),
-                "internal": bool(self.tap_token()),
-                "basefreq": i.get("basefreq"), "total_bandwidth": i.get("total_bandwidth"),
-                "rx": i.get("rx"), "rx_name": i.get("rx_name"),
-                "receivers": i.get("receivers") or [], "connected": bool(i)}
+    def chan_update(self, ch):
+        if ch.id in self.channels:
+            self.broadcast({"t": "chan", **ch.describe()})
 
-    # ------------------------------------------------------------------ cycle de vie
-    async def connect_server(self):
-        if self.waterfall:
-            await self.waterfall.close()
+    def src_conf(self, sid=None):
+        sid = sid or self.conf["source"]
+        for s in self.conf["sources"]:
+            if s["id"] == sid:
+                return s
+        return self.conf["sources"][0]
+
+    # ------------------------------------------------------------------ source et canaux
+    async def connect_source(self):
+        if self.src:
+            await self.src.stop()
         for ch in list(self.channels.values()):
-            await ch.stop()
+            ch.stop()
         self.channels.clear()
-        self.wf_info = None
-        self.broadcast({"t": "server", "info": self._server_summary()})
-        self.waterfall = Waterfall(self.server["url"], rx=self.rx, on_line=self._wf_line,
-                                   on_info=self._wf_info, session=self.http)
-        self.waterfall.start()
+        self.broadcast({"t": "chans_reset"})
+        conf = self.src_conf()
+        self.conf["source"] = conf["id"]
+        self.src = make_source(self, conf)
+        self.broadcast({"t": "source", "info": self.src.summary()})
+        await self.src.start()
+        rx = conf.get("rx")
         for c in self.conf.get("channels", []):
-            if c.get("server") == self.server["url"] and c.get("rx") == self.rx and c.get("mode") in BY_ID:
-                self._add_channel(c["mode"], c["freq"], c.get("params"), c.get("paused", False), save=False)
+            if c.get("source") == conf["id"] and c.get("rx") == rx and c.get("mode") in BY_ID:
+                self._add_channel(c["mode"], freq=c.get("freq", 0), af=c.get("af"), params=c.get("params"),
+                                  paused=c.get("paused", False), save=False)
 
-    def _add_channel(self, mode_id, freq, params=None, paused=False, save=True):
+    def _add_channel(self, mode_id, freq=None, af=None, params=None, paused=False, save=True):
         cid = uuid.uuid4().hex[:8]
-        ch = Channel(self, cid, mode_id, freq, params, paused)
+        ch = Channel(self, cid, mode_id, freq or 0, af, params, paused)
+        if self.src.shared and af is None and freq is not None:
+            self.src.set_chan_freq(ch, freq)
+        if ch.mode.get("whole") and self.src.shared:
+            ch.af = 0.0
         self.channels[cid] = ch
-        ch.start()
-        self.broadcast({"t": "chan", **ch.describe()})
+        self.src.attach(ch)
+        self.chan_update(ch)
         if save:
             self._save_channels()
         return ch
 
     def _save_channels(self):
-        others = [c for c in self.conf.get("channels", [])
-                  if not (c.get("server") == self.server["url"] and c.get("rx") == self.rx)]
-        mine = [{"server": self.server["url"], "rx": self.rx, "mode": ch.mode["id"], "freq": ch.freq,
+        conf = self.src_conf()
+        rx = conf.get("rx")
+        others = [c for c in self.conf.get("channels", []) if not (c.get("source") == conf["id"] and c.get("rx") == rx)]
+        mine = [{"source": conf["id"], "rx": rx, "mode": ch.mode["id"], "freq": ch.freq, "af": ch.af,
                  "params": ch.params, "paused": ch.paused} for ch in self.channels.values()]
         self.conf["channels"] = others + mine
         save_conf(self.conf)
@@ -281,69 +317,108 @@ class App:
     # ------------------------------------------------------------------ messages de l'interface
     async def handle(self, ws, m):
         t = m.get("t")
+        src = self.src
         if t == "add":
-            mode = BY_ID.get(m.get("mode"))
-            if mode:
-                self._add_channel(mode["id"], float(m["freq"]), m.get("params"))
+            if m.get("mode") in BY_ID:
+                self._add_channel(m["mode"], freq=float(m["freq"]), params=m.get("params"))
+        elif t == "preset":
+            await self._preset(ws, m)
         elif t == "remove":
             ch = self.channels.pop(m.get("ch"), None)
             if ch:
-                await ch.stop()
+                await src.detach(ch)
+                ch.stop()
                 self.broadcast({"t": "chan_removed", "ch": ch.id})
                 self._save_channels()
         elif t == "retune":
             ch = self.channels.get(m.get("ch"))
             if ch:
-                await ch.retune(freq=m.get("freq"), params=m.get("params"))
-                self.broadcast({"t": "chan", **ch.describe()})
+                if m.get("params") is not None:
+                    ch.params.update(m["params"])
+                if m.get("freq") is not None:
+                    src.set_chan_freq(ch, float(m["freq"]))
+                if m.get("params") is not None or not await src.retune(ch):
+                    ch.reset_decoder()
+                else:
+                    ch.move_decoder(src.decoder_af(ch))
+                self.chan_update(ch)
                 self._save_channels()
         elif t == "pause":
             ch = self.channels.get(m.get("ch"))
             if ch:
                 ch.paused = bool(m.get("paused"))
-                self.broadcast({"t": "chan", **ch.describe()})
+                ch.reset_decoder()
+                self.chan_update(ch)
                 self._save_channels()
         elif t == "view":
-            if self.waterfall:
-                await self.waterfall.set_view(float(m["f0"]), float(m["f1"]))
-        elif t == "select_server":
-            idx = int(m.get("index", 0))
-            if 0 <= idx < len(self.conf["servers"]):
-                self.conf["server"] = idx
-                self.conf["rx"] = None
+            await src.set_view(float(m["f0"]), float(m["f1"]))
+        elif t == "qsy":
+            ok = await src.qsy(float(m["freq"])) if src.shared else False
+            if not ok:
+                await self._send(ws, json.dumps({"t": "notice", "level": "error",
+                                                 "text": "Cette source ne permet pas de changer de fréquence (pas de CAT)."}))
+        elif t == "select_source":
+            if any(s["id"] == m.get("id") for s in self.conf["sources"]):
+                self.conf["source"] = m["id"]
                 save_conf(self.conf)
-                await self.connect_server()
+                await self.connect_source()
         elif t == "select_rx":
-            self.conf["rx"] = m.get("rx") or None
+            self.src_conf()["rx"] = m.get("rx") or None
             save_conf(self.conf)
-            await self.connect_server()
-        elif t == "servers_set":
-            servers = [s for s in m.get("servers", []) if s.get("url")]
-            if servers:
-                cur = self.server["url"]
-                self.conf["servers"] = servers
-                urls = [s["url"] for s in servers]
-                self.conf["server"] = urls.index(cur) if cur in urls else 0
+            await self.connect_source()
+        elif t == "sources_set":
+            new = []
+            for s in m.get("sources", []):
+                if s.get("type") not in TYPES:
+                    continue
+                s = {k: v for k, v in s.items() if isinstance(v, (str, int, float, bool)) or v is None}
+                s["id"] = s.get("id") or uuid.uuid4().hex[:6]
+                new.append(s)
+            if new:
+                old_cur = json.dumps(self.src_conf(), sort_keys=True)
+                self.conf["sources"] = new
+                if not any(s["id"] == self.conf["source"] for s in new):
+                    self.conf["source"] = new[0]["id"]
                 save_conf(self.conf)
-                if cur not in urls:
-                    await self.connect_server()
-                self.broadcast({"t": "servers", "servers": servers, "current": self.conf["server"]})
+                self.broadcast({"t": "sources", "sources": new, "current": self.conf["source"]})
+                if json.dumps(self.src_conf(), sort_keys=True) != old_cur:
+                    await self.connect_source()
+        elif t == "audio_inputs":
+            await self._send(ws, json.dumps({"t": "audio_inputs", "inputs": await asyncio.to_thread(list_audio_inputs)}))
         elif t == "prefs":
             self.conf.setdefault("ui", {}).update(m.get("prefs", {}))
             save_conf(self.conf)
         elif t == "quit":
             self.quit.set()
 
+    async def _preset(self, ws, m):
+        """Fréquence connue : canal direct (PhantomSDR), ou réaccord du récepteur puis canal (TCI, CAT)."""
+        mode = BY_ID.get(m.get("mode"))
+        if not mode:
+            return
+        f = float(m["freq"])
+        src = self.src
+        if not src.shared:
+            self._add_channel(mode["id"], freq=f, params=m.get("params"))
+            return
+        dial = f if mode.get("whole") else f - mode["af"]
+        if await src.qsy(dial, "usb"):
+            self._add_channel(mode["id"], af=0.0 if mode.get("whole") else float(mode["af"]), params=m.get("params"))
+        else:
+            await self._send(ws, json.dumps({"t": "notice", "level": "error",
+                "text": f"Pas de contrôle CAT sur cette source : réglez le récepteur sur {dial / 1000:.1f} kHz en USB, "
+                        f"puis cliquez sur le signal dans le waterfall."}))
+
     async def hello(self, ws):
         await self._send(ws, json.dumps({
-            "t": "hello", "version": __version__, "catalog": public_catalog(),
-            "servers": self.conf["servers"], "current": self.conf.get("server", 0),
-            "server": self._server_summary(), "ui": self.conf.get("ui", {}),
+            "t": "hello", "version": __version__, "catalog": public_catalog(), "types": TYPES,
+            "sources": self.conf["sources"], "current": self.conf["source"],
+            "source": self.src.summary() if self.src else {}, "ui": self.conf.get("ui", {}),
             "channels": [ch.describe() for ch in self.channels.values()],
-        }, ensure_ascii=False, default=float))
+        }, ensure_ascii=False, default=_num))
         for ch in self.channels.values():
             for ev in ch.history[-150:]:
-                await self._send(ws, json.dumps(ev, ensure_ascii=False, default=float))
+                await self._send(ws, json.dumps(ev, ensure_ascii=False, default=_num))
 
 
 def make_web(app):
@@ -413,7 +488,7 @@ async def main_async(args):
         await app.http.close()
         return
     log.info("Orsat-Decoder %s : %s", __version__, url)
-    await app.connect_server()
+    await app.connect_source()
     tasks = [asyncio.create_task(app.idle_watch())]
     browser = open_window(url, args)
     if browser is not None and "--app=" in " ".join(map(str, browser.args)):
@@ -422,10 +497,10 @@ async def main_async(args):
             app.quit.set()
         tasks.append(asyncio.create_task(wait_browser()))
     await app.quit.wait()
+    if app.src:
+        await app.src.stop()
     for ch in list(app.channels.values()):
-        await ch.stop()
-    if app.waterfall:
-        await app.waterfall.close()
+        ch.stop()
     for t in tasks:
         t.cancel()
     await app.http.close()
@@ -434,7 +509,7 @@ async def main_async(args):
 
 
 def main():
-    ap = argparse.ArgumentParser(prog="orsat-decoder", description="Décodeur multimode pour PhantomSDR / Orsat-SDR")
+    ap = argparse.ArgumentParser(prog="orsat-decoder", description="Décodeur multimode pour PhantomSDR, TCI, carte son")
     ap.add_argument("--port", type=int, default=8074, help="port de l'interface (défaut 8074)")
     ap.add_argument("--lan", action="store_true", help="interface accessible depuis le réseau local")
     ap.add_argument("--no-browser", action="store_true", help="ne pas ouvrir de fenêtre")

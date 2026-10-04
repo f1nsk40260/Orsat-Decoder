@@ -65,8 +65,10 @@ if [ ! -x "$APPDIR/venv/bin/python" ]; then
   python3 -m venv "$APPDIR/venv" || fail "création de l'environnement Python (paquet python3-venv manquant ?)."
 fi
 "$APPDIR/venv/bin/pip" install -q --upgrade pip >/dev/null 2>&1 || true
-"$APPDIR/venv/bin/pip" install -q numpy scipy aiohttp cbor2 zstandard || fail "installation des modules Python (connexion Internet ?)."
+"$APPDIR/venv/bin/pip" install -q numpy scipy aiohttp cbor2 zstandard pyflac || fail "installation des modules Python (connexion Internet ?)."
 info "Modules installés."
+command -v parec >/dev/null || command -v pw-record >/dev/null || \
+  info "${dim}Note : ni parec ni pw-record trouvés ; la source « Entrée audio » demande pulseaudio-utils ou pipewire-bin.${off}"
 
 # -------------------------------------------------------------------------------------
 step "5/5  Lanceur, menu et autotest"
@@ -105,7 +107,7 @@ if "$BINDIR/orsat-decoder" --check; then
   echo
   echo "${gold}${bold}Installation terminée.${off}"
   echo "  Lancez ${bold}Orsat-Decoder${off} depuis le menu des applications, ou tapez :  ${bold}orsat-decoder${off}"
-  echo "  Le serveur se choisit en haut à gauche ; adresses modifiables dans les réglages."
+  echo "  La source (PhantomSDR / Orsat-SDR, TCI, entrée audio) se choisit en haut à gauche ; elles se règlent dans les réglages."
   echo "  Désinstallation :  $APPDIR/uninstall.sh"
   case ":$PATH:" in *":$BINDIR:"*) ;; *) echo "  ${dim}Note : $BINDIR n'est pas dans votre PATH ; utilisez le menu ou ouvrez un nouveau terminal.${off}";; esac
   if ! command -v chromium >/dev/null && ! command -v chromium-browser >/dev/null && ! command -v google-chrome >/dev/null && ! command -v brave-browser >/dev/null; then

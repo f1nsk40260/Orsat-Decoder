@@ -51,6 +51,37 @@ def check_ft8():
     return ok
 
 
+def check_flac():
+    """Chaîne FLAC des serveurs PhantomSDR-Plus : encodage en blocs de 256, décodage en continu."""
+    try:
+        import pyflac
+        from orsatdec.codecs import FlacStream
+    except Exception as e:
+        print(f"  ÉCHEC  FLAC        module absent ({e})")
+        return False
+    import time
+    msg = "CQ CQ DE F1NSK FLAC TEST 0123456789"
+    x = np.concatenate([np.zeros(FS // 2), psk_encode(msg, fs=FS, af=1000), np.zeros(FS // 2)])
+    pcm = (np.clip(x, -1, 1) * 32000).astype(np.int16)
+    chunks = []
+    enc = pyflac.StreamEncoder(write_callback=lambda buf, nb, ns, cf: chunks.append(bytes(buf)),
+                               sample_rate=FS, blocksize=256)
+    for i in range(0, len(pcm), 1024):
+        enc.process(pcm[i:i + 1024])
+    enc.finish()
+    out = []
+    dec_psk = PSK(FS, 1000)
+    stream = FlacStream(lambda y, fs: out.extend(e["text"] for e in dec_psk.process(y)))
+    for c in chunks:
+        stream.feed(c)
+    time.sleep(0.5)
+    stream.close()
+    sc = score(msg, "".join(out))
+    ok = sc >= 0.9
+    print(f"  {'OK ' if ok else 'ÉCHEC'}  FLAC         flux   {sc:5.0%}")
+    return ok
+
+
 def main():
     print("Autotest des décodeurs (mires générées, bruit ajouté) :")
     m1 = "CQ CQ DE F1NSK F1NSK ORSAT DECODER TEST 0123456789"
@@ -62,6 +93,7 @@ def main():
         check("CW", cw_encode(m1, fs=FS, af=700, wpm=20), CW(FS, 700), m1, 0),
         check("Navtex", sitorb_encode(nav, fs=FS, af=1000), SitorB(FS, 1000), nav, 0),
         check_ft8(),
+        check_flac(),
     ]
     n = sum(results)
     print(f"{n}/{len(results)} décodeurs validés.")

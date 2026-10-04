@@ -141,3 +141,31 @@ dialog code { color: var(--text); }
   #chans { grid-template-columns: 1fr; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* ---------- sources ---------- */
+.pick { display: flex; align-items: center; gap: 6px; }
+.pick-lbl { color: var(--muted); font-size: 12.5px; }
+.pick.dial input { width: 110px; background: var(--night); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px;
+  font-variant-numeric: tabular-nums; text-align: right; }
+.pick.dial .unit { color: var(--muted); font-size: 12px; }
+#srcList { display: grid; gap: 10px; margin-bottom: 10px; }
+.src { border: 1px solid var(--line); border-radius: 8px; padding: 10px; display: grid; gap: 6px; background: var(--night); }
+.src.cur { border-color: var(--gold); }
+.src .top { display: flex; gap: 8px; align-items: center; }
+.src .top .kind { color: var(--muted); font-size: 12px; margin-left: auto; white-space: nowrap; }
+.src input, .src select { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; min-width: 0; width: 100%; }
+.src .top input { font-weight: 700; }
+.src .f { display: grid; grid-template-columns: 130px 1fr; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
+.row-btns { display: flex; gap: 8px; align-items: center; }
+.row-btns select { max-width: 300px; }
+.src-help { padding-left: 18px; }
+.src-help li { margin: 4px 0; }
+
+/* ---------- accord fin ---------- */
+.chan.active { box-shadow: 0 0 0 1px var(--c); }
+.spec-wrap { position: relative; padding: 0 10px 8px; }
+.spec { width: 100%; height: 64px; display: block; border-radius: 6px; cursor: crosshair; background: #101A23; }
+.spec-read { position: absolute; right: 16px; top: 3px; font-size: 11px; color: var(--muted); pointer-events: none; font-variant-numeric: tabular-nums; }
+.marker.active .band { opacity: .3; }
+.marker.active .edge { opacity: 1; border-left-style: solid; }
+.chan { height: 360px; }

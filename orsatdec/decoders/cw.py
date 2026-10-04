@@ -36,12 +36,21 @@ class CW(Decoder):
         self.n = 0
         self.squelch = squelch
         self.af0 = float(af)
+        self.span = 250.0                         # recherche de porteuse autour du clic (Hz)
         self.finder = ToneFinder(self.fs, seconds=1.0, period=1.0)
 
     def set_af(self, af):
         super().set_af(af)
         self.af0 = float(af)
         self.mix.freq = float(af)
+        self.span = 40.0
+        # nouvel endroit : on oublie ce qui a été appris ailleurs (vitesse, niveaux, signe en cours)
+        self.marks.clear()
+        self.hist.clear()
+        self.code = ""
+        wpm = 1.2 * self.rate / self.dot
+        if not 8 <= wpm <= 45:
+            self.dot = 1.2 / 20 * self.rate                          # réglage manuel : on reste où l'utilisateur a mis
 
     def status(self):
         snr = 20 * np.log10(max(self.top, 1e-9) / max(self.floor, 1e-9))
@@ -50,7 +59,7 @@ class CW(Decoder):
     def process(self, x):
         x = np.asarray(x, np.float64)
         if self.finder.feed(x):
-            fc = self.finder.find(self.af0, 200.0, min_ratio=20.0)
+            fc = self.finder.find(self.af0, self.span, min_ratio=20.0)
             if fc is not None and abs(fc - self.mix.freq) > 8:
                 self.mix.freq = fc                       # la porteuse est ailleurs : on s'y cale
         e = np.abs(self.fir.process(self.mix.process(x)))
@@ -72,7 +81,9 @@ class CW(Decoder):
             span = self.top - self.floor
             hi = self.floor + 0.55 * span
             lo = self.floor + 0.40 * span
-            present = self.top > 1.6 * self.floor and self.top > self.squelch
+            # sur du bruit seul ce rapport vaut ≈2,6 : au-dessus de 3, il y a vraiment un signal manipulé
+            present = self.top > 3.0 * self.floor and self.top > self.squelch
+            self.present = present
             self.run += 1
             # anti-rebond : un changement d'état doit durer au moins un quart de point
             want = (env > hi and present) if not self.on else not (env < lo)
@@ -121,7 +132,7 @@ class CW(Decoder):
         self.dot = min(max(self.dot, 1.2 / 60 * self.rate), 1.2 / 5 * self.rate)
 
     def _mark(self, n):
-        if n < 0.35 * self.dot:
+        if n < min(0.35 * self.dot, 0.02 * self.rate):   # parasite (plus court qu'un point à 60 mpm)
             return
         self.marks.append(n)
         self._classify_speed()

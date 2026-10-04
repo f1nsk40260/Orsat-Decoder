@@ -16,6 +16,8 @@ import cbor2
 import numpy as np
 import zstandard
 
+from .codecs import FlacStream, OpusStream
+
 log = logging.getLogger("orsat.phantom")
 
 # Bande passante audio extraite autour de la fréquence d'accord, par démodulation (Hz)
@@ -39,14 +41,21 @@ def ws_url(server, path, rx=None, tap=None):
 
 
 class AudioChannel:
-    """Flux audio d'un canal. on_pcm(np.float32[]) est appelé pour chaque paquet reçu."""
+    """Flux audio d'un canal. on_pcm(np.float32[], fs) est appelé pour chaque bloc décodé.
 
-    def __init__(self, server, freq, mode="USB", rx=None, tap=None, on_pcm=None, on_state=None, session=None):
+    On demande du PCM brut (Orsat-SDR) ; un serveur qui ne le propose pas (PhantomSDR-Plus) continue
+    d'envoyer du FLAC ou de l'Opus, qu'on décode alors ici."""
+
+    def __init__(self, server, freq, mode="USB", rx=None, tap=None, on_pcm=None, on_state=None, session=None,
+                 ask_pcm=True):
         self.server, self.freq, self.mode, self.rx, self.tap = server, float(freq), mode.upper(), rx, tap
-        self.on_pcm = on_pcm or (lambda x: None)
+        self.on_pcm = on_pcm or (lambda x, fs: None)
         self.on_state = on_state or (lambda s, info=None: None)
         self.info = None
         self.sample_rate = None
+        self.ask_pcm = ask_pcm
+        self.codec = None              # codec effectivement reçu : pcm, flac ou opus
+        self._dec = None
         self.ws = None
         self._session = session
         self._own_session = session is None
@@ -64,6 +73,55 @@ class AudioChannel:
             self._task.cancel()
         if self._own_session and self._session:
             await self._session.close()
+
+    def _reset_decoder(self):
+        if self._dec is not None:
+            try:
+                self._dec.close()
+            except Exception:
+                pass
+        self._dec, self.codec = None, None
+
+    def _emit(self, x, fs):
+        self.sample_rate = fs
+        self.on_pcm(x, fs)
+
+    def _audio(self, codec, data):
+        """Paquet audio : PCM int16, morceau de flux FLAC, ou trame Opus."""
+        if codec is None:                                 # anciens serveurs : pas de champ codec
+            if data[:4] == b"fLaC" or self.codec == "flac":
+                codec = "flac"
+            else:
+                codec = (self.info or {}).get("audio_compression", "flac")
+        codec = codec.lower()
+        # Le serveur relance son encodeur FLAC à chaque changement de démodulation : un nouvel
+        # en-tête « fLaC » arrive alors au milieu du flux, il faut repartir avec un décodeur neuf.
+        if codec != self.codec or (codec == "flac" and data[:4] == b"fLaC" and self._dec is not None):
+            first = codec != self.codec
+            self._reset_decoder()
+            self.codec = codec
+            if first:
+                self.on_state("codec", {"codec": codec})
+            try:
+                if codec == "flac":
+                    self._dec = FlacStream(self._emit)
+                elif codec == "opus":
+                    self._dec = OpusStream(self._emit, (self.info or {}).get("audio_max_sps", 12000))
+            except Exception as e:
+                log.warning("décodeur audio %s indisponible : %s", codec, e)
+                self.on_state("error", {"error": f"décodeur {codec} indisponible : {e}"})
+                self._dec = None
+        if codec == "pcm":
+            n = len(data) // 2
+            self._emit(np.frombuffer(data[:n * 2], "<i2").astype(np.float32) / 32768.0,
+                       (self.info or {}).get("audio_max_sps", 12000))
+        elif self._dec is not None:
+            try:
+                self._dec.feed(data)
+            except Exception as e:
+                # flux FLAC désynchronisé (ex. changement de mode stéréo) : on repart à zéro
+                log.debug("audio %s : %s", codec, e)
+                self._reset_decoder()
 
     def _bin(self, f):
         i = self.info
@@ -105,7 +163,9 @@ class AudioChannel:
                             self.info = json.loads(msg.data)
                             self.sample_rate = self.info.get("audio_max_sps")
                             got_info = True
-                            await self._send({"cmd": "set_codec", "codec": "pcm"})
+                            self._reset_decoder()
+                            if self.ask_pcm:
+                                await self._send({"cmd": "set_codec", "codec": "pcm"})
                             await self._send({"cmd": "agc_enable", "enabled": True})
                             await self._tune()
                             # le serveur ignore une démodulation reçue dans ses 100 premières ms
@@ -118,12 +178,10 @@ class AudioChannel:
                                 pkt = cbor2.loads(msg.data)
                             except Exception:
                                 continue
-                            if pkt.get("codec") != "pcm" or not pkt.get("data"):
+                            data = pkt.get("data")
+                            if not data:
                                 continue
-                            raw = pkt["data"]
-                            n = len(raw) // 2
-                            pcm = np.frombuffer(raw[:n * 2], "<i2").astype(np.float32) / 32768.0
-                            self.on_pcm(pcm)
+                            self._audio(pkt.get("codec"), bytes(data))
                         elif msg.type in (aiohttp.WSMsgType.CLOSED, aiohttp.WSMsgType.ERROR):
                             break
             except asyncio.CancelledError:
@@ -131,6 +189,7 @@ class AudioChannel:
             except Exception as e:
                 log.info("audio %s : %s", self.server, e)
                 self.on_state("error", {"error": str(e)})
+            self._reset_decoder()
             if self._closing:
                 return
             self.on_state("reconnecting")

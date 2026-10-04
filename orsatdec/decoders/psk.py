@@ -42,6 +42,8 @@ class PSK(Decoder):
         self.af0 = float(af)
         self.mix.freq = float(af)
         self.wide_mix.freq = float(af)
+        self.capture = max(20.0, self.baud * 0.75)   # réglage manuel : acquisition resserrée
+        self.last_cand = None
 
     def status(self):
         return {"af": round(self.mix.freq, 1), "quality": round(max(0.0, self.quality), 2),

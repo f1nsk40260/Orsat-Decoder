@@ -27,10 +27,12 @@ class FSKDemod:
         self.level = 0.0
         self.noise = 1e-9
         self.af0 = self.af = float(af)
+        self.span = 150.0
         self.finder = ToneFinder(self.fs, seconds=1.5, period=1.0)
 
     def set_af(self, af):
         self.af0 = float(af)
+        self.span = 30.0
         self._tune(af)
 
     def _tune(self, af):
@@ -40,7 +42,7 @@ class FSKDemod:
 
     def process(self, x):
         if self.finder.feed(x):
-            fc = self.finder.find(self.af0, 120.0, shift=self.shift, min_ratio=6.0)
+            fc = self.finder.find(self.af0, self.span, shift=self.shift, min_ratio=6.0)
             if fc is not None and abs(fc - self.af) > 6:
                 self._tune(fc)
         m = np.abs(self.fm.process(self.mark_mix.process(x)))
@@ -67,7 +69,7 @@ class FSKDemod:
 class RTTY(Decoder):
     name = "RTTY"
 
-    def __init__(self, fs, af=1000.0, baud=45.45, shift=170.0, reverse=False, stop_bits=1.5, squelch=0.0, bw_factor=0.6):
+    def __init__(self, fs, af=1000.0, baud=45.45, shift=170.0, reverse=False, stop_bits=1.5, squelch=0.65, bw_factor=0.6):
         super().__init__(fs, af)
         self.baud, self.shift = float(baud), float(shift)
         self.demod = FSKDemod(fs, af, baud, shift, reverse, bw_factor)
@@ -79,6 +81,7 @@ class RTTY(Decoder):
         self.figs = False
         self.squelch = squelch
         self.good = 0.5       # proportion de caractères bien encadrés (stop correct)
+        self.held = []        # caractères reçus pendant que le silencieux est fermé
         self.idle_mark = 0
 
     def set_af(self, af):
@@ -119,8 +122,15 @@ class RTTY(Decoder):
                         self.good += 0.05 * ((1.0 if ok else 0.0) - self.good)
                         code = sum(b << i for i, b in enumerate(self.bits[1:6]))
                         ch = self._char(code)
-                        if ch and self.good >= self.squelch:
-                            out.append(ch)
+                        # silencieux à mémoire : sur du bruit, la moitié seulement des caractères ont un
+                        # bit d'arrêt correct ; on retient les derniers et on les rend dès que c'est un signal
+                        if self.good >= self.squelch:
+                            out.extend(self.held)
+                            self.held.clear()
+                            if ch:
+                                out.append(ch)
+                        elif ch:
+                            self.held = (self.held + [ch])[-10:]
                         self.state = "idle"
             self.prev = v
         return [{"t": "text", "text": "".join(out)}] if out else []

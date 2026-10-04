@@ -1,0 +1,98 @@
+"""Faux serveur TCI pour les essais : se comporte comme AetherSDR / ExpertSDR vu du client.
+
+Envoie l'audio de réception (float32, 12 kHz) d'une bande BLU synthétique qui dépend de la fréquence
+du VFO, et accepte les commandes vfo / modulation / audio_start.
+
+    python tests/fake_tci.py [port]          (défaut 50001)
+"""
+import asyncio
+import struct
+import sys
+from pathlib import Path
+
+import numpy as np
+from aiohttp import web, WSMsgType
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from orsatdec.gen.encoders import psk_encode, rtty_encode, cw_encode  # noqa: E402
+
+FS = 12000
+# Signaux présents « sur l'air » (fréquence RF du signal)
+AF0 = 1500.0     # les mires sont générées autour de 1500 Hz, puis déplacées à leur place
+STATIONS = [
+    (7_070_800, lambda: psk_encode("CQ CQ DE F1NSK F1NSK TCI TEST PSK31 ", fs=FS, af=AF0)),
+    (7_071_500, lambda: rtty_encode("RYRYRY CQ DE F1NSK TCI RTTY TEST ", fs=FS, af=AF0)),
+    (7_069_900, lambda: cw_encode("CQ CQ DE F1NSK TCI K", fs=FS, af=AF0, wpm=22)),
+]
+
+
+class Air:
+    def __init__(self):
+        self.bb = []
+        for f, gen in STATIONS:
+            x = gen()
+            from scipy.signal import hilbert
+            a = hilbert(np.concatenate([x, np.zeros(FS)]))
+            self.bb.append((f, a))
+        self.pos = 0
+
+    def block(self, dial, n):
+        t = (self.pos + np.arange(n)) / FS
+        out = np.zeros(n, np.complex128)
+        for f, a in self.bb:
+            off = f - dial
+            if 100 < off < 4000:
+                idx = (self.pos + np.arange(n)) % len(a)
+                out += a[idx] * np.exp(2j * np.pi * (off - AF0) * t)
+        self.pos += n
+        y = np.real(out) * 0.3 + np.random.default_rng(self.pos).normal(0, 0.01, n)
+        return y.astype(np.float32)
+
+
+async def handler(request):
+    ws = web.WebSocketResponse()
+    await ws.prepare(request)
+    st = {"dial": 7_069_000, "mode": "usb", "audio": False}
+    air = Air()
+    await ws.send_str("protocol:ExpertSDR3,2.0;device:FakeTCI;receive_only:true;trx_count:1;channels_count:2;")
+    await ws.send_str(f"vfo:0,0,{st['dial']};modulation:0,{st['mode']};ready;")
+
+    async def stream():
+        n = FS // 20
+        while not ws.closed:
+            if st["audio"]:
+                x = air.block(st["dial"], n)
+                hdr = struct.pack("<8I", 0, FS, 3, 0, 0, len(x), 1, 1) + bytes(32)
+                await ws.send_bytes(hdr + x.tobytes())
+            await asyncio.sleep(n / FS)
+
+    task = asyncio.create_task(stream())
+    async for msg in ws:
+        if msg.type != WSMsgType.TEXT:
+            continue
+        for cmd in msg.data.split(";"):
+            name, _, args = cmd.strip().partition(":")
+            a = args.split(",")
+            if name == "audio_start":
+                st["audio"] = True
+            elif name == "audio_stop":
+                st["audio"] = False
+            elif name == "vfo" and len(a) >= 3:
+                st["dial"] = int(float(a[2]))
+                await ws.send_str(f"vfo:0,0,{st['dial']};")
+            elif name == "modulation" and len(a) >= 2:
+                st["mode"] = a[1]
+                await ws.send_str(f"modulation:0,{st['mode']};")
+    task.cancel()
+    return ws
+
+
+def main():
+    port = int(sys.argv[1]) if len(sys.argv) > 1 else 50001
+    app = web.Application()
+    app.router.add_get("/", handler)
+    web.run_app(app, host="127.0.0.1", port=port, print=lambda *a: None)
+
+
+if __name__ == "__main__":
+    main()

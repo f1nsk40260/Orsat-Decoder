@@ -12,11 +12,15 @@
   <header id="bar">
     <div class="brand"><img src="icon.svg" alt=""><span>Orsat-Decoder</span></div>
 
-    <label class="pick" title="Serveur PhantomSDR / Orsat-SDR">
-      <select id="serverSel"></select>
+    <label class="pick" title="Source du signal : serveur PhantomSDR, TCI ou entrée audio">
+      <span class="pick-lbl">Source</span>
+      <select id="sourceSel"></select>
     </label>
     <label class="pick" id="rxPick" title="Récepteur" hidden>
       <select id="rxSel"></select>
+    </label>
+    <label class="pick dial" id="dialPick" title="Fréquence du récepteur (CAT) : Entrée pour la changer" hidden>
+      <input id="dialIn" inputmode="decimal" spellcheck="false" aria-label="Fréquence du récepteur en kHz"><span class="unit">kHz</span>
     </label>
     <span id="conn" class="conn">Connexion…</span>
 
@@ -35,6 +39,7 @@
     <div class="search"><input id="modeSearch" type="search" placeholder="Chercher un mode…" autocomplete="off" spellcheck="false"></div>
     <nav id="modeList"></nav>
     <p class="hint" id="placeHint">Choisissez un mode, puis cliquez sur un signal dans le waterfall pour ouvrir un canal.</p>
+    <p class="hint keys">Molette : accorde le canal actif (Maj : 1 Hz, Alt : 100 Hz). Ctrl+molette : zoom.</p>
   </aside>
 
   <main id="main">
@@ -63,10 +68,17 @@
 <dialog id="settings" class="sheet">
   <form method="dialog">
     <header><h2>Réglages</h2><button class="icon-btn" value="close" aria-label="Fermer">✕</button></header>
-    <h3>Serveurs</h3>
-    <div id="srvList"></div>
-    <button type="button" id="srvAdd" class="btn">Ajouter un serveur</button>
-    <p class="hint">Adresse d'un PhantomSDR-Plus ou d'Orsat-SDR, par exemple <code>http://orsat.ddns.net:8080</code>.</p>
+    <h3>Sources</h3>
+    <div id="srcList"></div>
+    <div class="row-btns">
+      <select id="srcNewType" aria-label="Type de la nouvelle source"></select>
+      <button type="button" id="srcAdd" class="btn">Ajouter</button>
+    </div>
+    <ul class="hint src-help">
+      <li><b>PhantomSDR / Orsat-SDR</b> : adresse du serveur, par exemple <code>http://orsat.ddns.net:8080</code>. Chaque canal a son propre accord, sur toute la bande du serveur.</li>
+      <li><b>TCI</b> : AetherSDR (réglage TCI, port 50001), ExpertSDR, Thetis… Audio et fréquence du récepteur passent par la même connexion.</li>
+      <li><b>Entrée audio</b> : carte son du transceiver, ou sortie d'un logiciel (choisir son « Monitor »). Le CAT rigctld est facultatif : AetherSDR, rigctld et flrig l'offrent sur le port 4532.</li>
+    </ul>
     <h3>Waterfall</h3>
     <label class="row">Palette<select id="setPalette">
       <option value="cadran">Cadran (or)</option><option value="glace">Glace</option>

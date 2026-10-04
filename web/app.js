@@ -15,7 +15,8 @@ const el = (tag, props = {}, ...kids) => {
 const COLORS = ['#C9A24A', '#4FB3BF', '#E07A5F', '#9B8AE6', '#7FB685', '#6FA8DC', '#D98CB3', '#B8C25A'];
 
 const S = {
-  ws: null, catalog: { modes: [], presets: [] }, byId: {}, servers: [], current: 0, server: {},
+  ws: null, catalog: { modes: [], presets: [] }, byId: {}, types: {}, sources: [], current: null, server: {},
+  inputs: [],
   chans: new Map(), mode: 'psk31',
   view: null,                 // [f0, f1] Hz affichés
   ui: { palette: 'cadran', contrast: 1, floor: 0, mode: 'psk31' },
@@ -27,7 +28,10 @@ function connect() {
   ws.binaryType = 'arraybuffer';
   S.ws = ws;
   ws.onmessage = ev => {
-    if (typeof ev.data !== 'string') return onWfFrame(ev.data);
+    if (typeof ev.data !== 'string') {
+      const k = new DataView(ev.data).getUint8(0);
+      return k === 2 ? onSpecFrame(ev.data) : onWfFrame(ev.data);
+    }
     let m; try { m = JSON.parse(ev.data); } catch { return; }
     (H[m.t] || (() => {}))(m);
   };
@@ -38,58 +42,103 @@ const send = o => { if (S.ws && S.ws.readyState === 1) S.ws.send(JSON.stringify(
 const H = {
   hello(m) {
     S.catalog = m.catalog; S.byId = Object.fromEntries(m.catalog.modes.map(x => [x.id, x]));
-    S.servers = m.servers; S.current = m.current;
+    S.types = m.types; S.sources = m.sources; S.current = m.current;
     Object.assign(S.ui, m.ui || {}); S.mode = S.ui.mode || 'psk31';
     applyUi();
     for (const c of [...S.chans.keys()]) removeChanCard(c);
     m.channels.forEach(upsertChan);
-    renderServers(); renderModes(); renderPresets(); onServer(m.server);
+    renderSources(); renderModes(); renderPresets(); onSource(m.source);
   },
-  server(m) { onServer(m.info); },
-  servers(m) { S.servers = m.servers; S.current = m.current; renderServers(); },
+  source(m) { onSource(m.info); },
+  sources(m) { S.sources = m.sources; S.current = m.current; renderSources(); },
+  chans_reset() { for (const c of [...S.chans.keys()]) removeChanCard(c); },
   chan(m) { upsertChan(m); },
   chan_removed(m) { removeChanCard(m.ch); },
   text(m) { const c = S.chans.get(m.ch); if (c) writeText(c, m.text); },
   msg(m) { const c = S.chans.get(m.ch); if (c) writeMsg(c, m); },
   cstat(m) { const c = S.chans.get(m.ch); if (c) updateStat(c, m); },
+  notice(m) { toast(m.text, m.level === 'error' ? 'error' : ''); },
+  audio_inputs(m) { S.inputs = m.inputs || []; renderSources(); },
 };
 
 function setConn(text, cls) { const c = $('#conn'); c.textContent = text; c.className = 'conn ' + (cls || ''); }
 
-function onServer(info) {
+const CODECS = { pcm: 'PCM', flac: 'FLAC', opus: 'Opus' };
+function onSource(info) {
   S.server = info || {};
-  if (info && info.connected) {
-    setConn(info.rx_name ? `${info.name} · ${info.rx_name}` : info.name, 'ok');
+  const s = S.server, shared = !!s.shared;
+  if (s.id) { S.current = s.id; $('#sourceSel').value = s.id; }
+  $('#dialPick').hidden = !(shared && s.can_qsy);
+  if (shared && s.can_qsy && document.activeElement !== $('#dialIn')) $('#dialIn').value = s.dial != null ? fmtKHz(s.dial) : '';
+  $('#rxPick').hidden = shared || (s.receivers || []).length < 2;
+  if (!shared) renderRx(s);
+  if (s.connected) {
+    let label = s.name;
+    if (s.kind === 'phantom') label += (s.rx_name ? ` · ${s.rx_name}` : '') + (s.codec ? ` · ${CODECS[s.codec] || s.codec}` : '');
+    else if (s.kind === 'tci') label += s.device ? ` · ${s.device}` : '';
+    else if (s.nodial) label += ' · sans CAT, fréquences audio';
+    setConn(s.error ? `${label} · ${s.error}` : label, s.error ? 'bad' : 'ok');
     $('#wfOverlay').hidden = true;
-    const full = [info.basefreq, info.basefreq + info.total_bandwidth];
-    if (!S.view || S.view[0] < full[0] - 1 || S.view[1] > full[1] + 1) S.view = full;
-    renderRx(info);
+    const full = [s.basefreq, s.basefreq + s.total_bandwidth];
+    // nouvelle source, ou récepteur réaccordé (audio partagé) : on repart sur toute la bande
+    const key = `${s.id}|${s.basefreq}|${s.total_bandwidth}`;
+    if (!S.view || key !== S.viewKey) {
+      S.view = full; S.viewKey = key;
+      if (WF.ctx) { WF.ctx.fillStyle = '#0D151D'; WF.ctx.fillRect(0, WF.scaleH, WF.w, WF.h - WF.scaleH); }
+      WF.floor = WF.peak = null; WF.lastRow = null; WF.warm = 4;
+    }
     drawScale(); placeMarkers(); sendView();
   } else {
-    setConn(`Connexion à ${info?.name || 'serveur'}…`, '');
+    setConn(s.error ? s.error : `Connexion à ${s.name || 'la source'}…`, s.error ? 'bad' : '');
     $('#wfOverlay').hidden = false;
-    $('#wfOverlay').innerHTML = `<p>Connexion à <b>${esc(info?.url || '')}</b>…<br><small>Vérifiez l'adresse dans les réglages si rien ne vient.</small></p>`;
+    const where = s.kind === 'audio' ? `l'entrée audio <b>${esc(s.device || 'par défaut')}</b>` : `<b>${esc(s.url || '')}</b>`;
+    $('#wfOverlay').innerHTML = `<p>${s.error ? esc(s.error) : 'Connexion à ' + where + '…'}<br><small>Vérifiez la source dans les réglages si rien ne vient.</small></p>`;
   }
+  renderModes();
+  for (const c of S.chans.values()) refreshCard(c);
 }
 
-// ------------------------------------------------------------------ serveurs et récepteurs
-function renderServers() {
-  const sel = $('#serverSel'); sel.replaceChildren();
-  S.servers.forEach((s, i) => sel.append(el('option', { value: i, text: s.name || s.url })));
+// ------------------------------------------------------------------ sources et récepteurs
+const SRC_FIELDS = {
+  phantom: [['url', 'Adresse', 'http://orsat.ddns.net:8080']],
+  tci: [['url', 'Adresse TCI', 'ws://127.0.0.1:50001'], ['trx', 'Récepteur (TRX)', '0']],
+  audio: [['device', 'Entrée audio', ''], ['rigctl', 'CAT rigctld (facultatif)', '127.0.0.1:4532']],
+};
+function renderSources() {
+  const sel = $('#sourceSel'); sel.replaceChildren();
+  S.sources.forEach(src => sel.append(el('option', { value: src.id, text: src.name || src.url || src.id })));
   sel.value = S.current;
-  const list = $('#srvList'); list.replaceChildren();
-  S.servers.forEach((s, i) => {
-    const n = el('input', { value: s.name || '', placeholder: 'Nom' });
-    const u = el('input', { value: s.url || '', placeholder: 'http://hôte:port' });
-    const del = el('button', { type: 'button', class: 'icon-btn small', title: 'Supprimer', text: '✕' });
-    n.onchange = u.onchange = () => { S.servers[i] = { ...S.servers[i], name: n.value.trim(), url: u.value.trim() }; send({ t: 'servers_set', servers: S.servers }); };
-    del.onclick = () => { if (S.servers.length > 1) { S.servers.splice(i, 1); send({ t: 'servers_set', servers: S.servers }); } };
-    list.append(el('div', { class: 'srv' }, n, u, del));
+  const nt = $('#srcNewType');
+  if (!nt.childElementCount) for (const [k, v] of Object.entries(S.types)) nt.append(el('option', { value: k, text: v }));
+  const list = $('#srcList'); list.replaceChildren();
+  S.sources.forEach((src, i) => {
+    const commit = () => send({ t: 'sources_set', sources: S.sources });
+    const name = el('input', { value: src.name || '', placeholder: 'Nom', 'aria-label': 'Nom de la source' });
+    name.onchange = () => { src.name = name.value.trim(); commit(); };
+    const del = el('button', { type: 'button', class: 'icon-btn small', title: 'Supprimer cette source', text: '✕' });
+    del.onclick = () => { if (S.sources.length > 1) { S.sources.splice(i, 1); commit(); } };
+    const box = el('div', { class: 'src' + (src.id === S.current ? ' cur' : '') },
+      el('div', { class: 'top' }, name, el('span', { class: 'kind', text: S.types[src.type] || src.type }), del));
+    for (const [key, label, ph] of SRC_FIELDS[src.type] || []) {
+      let input;
+      if (key === 'device') {
+        input = el('select', { 'aria-label': label });
+        input.append(el('option', { value: '', text: 'Entrée par défaut du système' }));
+        const known = new Set();
+        for (const d of S.inputs) { known.add(d.name); input.append(el('option', { value: d.name, text: d.desc })); }
+        if (src.device && !known.has(src.device)) input.append(el('option', { value: src.device, text: src.device }));
+        input.value = src.device || '';
+      } else {
+        input = el('input', { value: src[key] ?? '', placeholder: ph, 'aria-label': label, spellcheck: 'false' });
+      }
+      input.onchange = () => { src[key] = key === 'trx' ? (parseInt(input.value, 10) || 0) : input.value.trim(); commit(); };
+      box.append(el('label', { class: 'f' }, label, input));
+    }
+    list.append(box);
   });
 }
 function renderRx(info) {
   const rs = info.receivers || [];
-  $('#rxPick').hidden = rs.length < 2;
   const sel = $('#rxSel'); sel.replaceChildren();
   rs.forEach(r => sel.append(el('option', { value: r.id, text: r.name || r.id })));
   if (info.rx) sel.value = info.rx;
@@ -109,7 +158,10 @@ function renderModes() {
       m.label, m.desc ? el('span', { class: 'd', text: m.desc }) : null));
   }
   const m = S.byId[S.mode];
-  $('#placeHint').textContent = m ? `Mode choisi : ${m.label}. Cliquez sur un signal dans le waterfall pour ouvrir un canal.` : '';
+  const shared = S.server && S.server.shared;
+  $('#placeHint').textContent = !m ? '' : shared
+    ? `Mode choisi : ${m.label}. Cliquez sur un signal dans le waterfall audio : tous les canaux partagent l'audio de la source.`
+    : `Mode choisi : ${m.label}. Cliquez sur un signal dans le waterfall pour ouvrir un canal.`;
 }
 function renderPresets() {
   const menu = $('#presetMenu'); menu.replaceChildren();
@@ -117,17 +169,21 @@ function renderPresets() {
   for (const p of S.catalog.presets) {
     const label = S.byId[p.mode]?.label || p.mode;
     if (label !== grp) { grp = label; menu.append(el('div', { class: 'grp', text: label })); }
-    menu.append(el('button', { type: 'button', onclick: () => { menu.hidden = true; addChannel(p.mode, p.freq, p.params); } },
+    menu.append(el('button', { type: 'button', onclick: () => { menu.hidden = true; usePreset(p); } },
       el('span', { text: p.label }), el('span', { text: fmtKHz(p.freq) })));
   }
 }
+function usePreset(p) {
+  if (S.server.shared) { send({ t: 'preset', mode: p.mode, freq: p.freq, params: p.params }); return; }
+  addChannel(p.mode, p.freq, p.params);
+}
 function addChannel(mode, freq, params) {
   const s = S.server;
-  if (s.basefreq != null && (freq < s.basefreq || freq > s.basefreq + s.total_bandwidth)) {
+  if (!s.shared && s.basefreq != null && (freq < s.basefreq || freq > s.basefreq + s.total_bandwidth)) {
     toast(`${fmtKHz(freq)} kHz est hors de la bande de ce récepteur (${fmtKHz(s.basefreq)} à ${fmtKHz(s.basefreq + s.total_bandwidth)} kHz).`, 'error');
     return;
   }
-  if (!s.local && S.chans.size >= 3)
+  if (s.kind === 'phantom' && !s.local && S.chans.size >= 3)
     toast('Attention : un serveur PhantomSDR-Plus limite en général à 3 auditeurs par adresse (per_ip). Au-delà, le canal peut être refusé. Lancer Orsat-Decoder sur la machine du serveur lève cette limite.', 'error');
   send({ t: 'add', mode, freq, params });
 }
@@ -144,7 +200,9 @@ function upsertChan(d) {
     S.chans.set(d.id, c);
     buildCard(c);
   } else {
+    const keep = c.pendingFreq != null && Date.now() - (c.lastTune || 0) < 600 ? c.pendingFreq : null;
     Object.assign(c, d);
+    if (keep != null) c.freq = keep;           // un écho du moteur ne doit pas faire reculer la molette
   }
   refreshCard(c);
   placeMarkers();
@@ -157,10 +215,10 @@ function removeChanCard(id) {
 }
 function buildCard(c) {
   const m = S.byId[c.mode];
-  const freq = el('input', { class: 'freq', title: 'Fréquence (kHz) : modifiable', 'aria-label': 'Fréquence en kHz' });
+  const freq = el('input', { class: 'freq', title: 'Fréquence : modifiable', 'aria-label': 'Fréquence' });
   freq.onchange = () => {
     const v = parseFloat(freq.value.replace(/\s/g, '').replace(',', '.'));
-    if (!isNaN(v)) send({ t: 'retune', ch: c.id, freq: v * 1000 });
+    if (!isNaN(v)) send({ t: 'retune', ch: c.id, freq: audioOnly() ? v : v * 1000 });
   };
   freq.onkeydown = e => { if (e.key === 'Enter') freq.blur(); };
   const pause = el('button', { class: 'icon-btn small', type: 'button', title: 'Pause' });
@@ -181,15 +239,101 @@ function buildCard(c) {
     (c.paramSel ||= {})[p.key] = [sel, p];
   }
   const out = el('div', { class: 'out', tabindex: '0' });
+  const spec = el('canvas', { class: 'spec', title: 'Spectre du canal : cliquez sur le signal, ou molette pour accorder (Maj : 1 Hz, Alt : 100 Hz)' });
+  const specWrap = el('div', { class: 'spec-wrap' }, spec, el('div', { class: 'spec-read' }));
   const card = el('article', { class: 'chan', style: `--c:${c.color}` },
-    el('header', {}, el('span', { class: 'mname', text: m.label }), freq, el('span', { class: 'unit', text: 'kHz' }),
+    el('header', {}, el('span', { class: 'mname', text: m.label }), freq, el('span', { class: 'unit' }),
       el('span', { class: 'state' }), el('div', { class: 'tools' }, pause, clear, save, close)),
-    el('div', { class: 'sub' }, params, meters), out);
-  Object.assign(c, { card, out, freqIn: freq, meters, pauseBtn: pause, stateEl: card.querySelector('.state') });
+    el('div', { class: 'sub' }, params, meters), specWrap, out);
+  Object.assign(c, { card, out, freqIn: freq, meters, pauseBtn: pause, stateEl: card.querySelector('.state'),
+    spec, specRead: specWrap.querySelector('.spec-read') });
+  card.addEventListener('mousedown', () => setActive(c.id));
+  spec.addEventListener('click', e => {
+    if (!c.specRange) return;
+    const r = spec.getBoundingClientRect(), [a, b] = c.specRange;
+    let f = a + (e.clientX - r.left) / r.width * (b - a);
+    f = snapSpec(c, f);
+    tuneChan(c, Math.round(f));
+  });
+  spec.addEventListener('wheel', e => { e.preventDefault(); setActive(c.id); wheelTune(c, e); }, { passive: false });
+  freq.addEventListener('wheel', e => { e.preventDefault(); setActive(c.id); wheelTune(c, e); }, { passive: false });
   $('#chans').prepend(card);
+  setActive(c.id);
+}
+
+// ------------------------------------------------------------------ accord fin (molette, mini-spectre)
+function setActive(id) {
+  S.active = id;
+  for (const c of S.chans.values()) c.card.classList.toggle('active', c.id === id);
+  placeMarkers();
+}
+function stepOf(e) { return e.shiftKey ? 1 : e.altKey ? 100 : 10; }
+function wheelTune(c, e) {
+  if (S.byId[c.mode]?.whole) return;
+  const dir = (e.deltaY || e.deltaX) < 0 ? 1 : -1;
+  tuneChan(c, Math.round((c.pendingFreq ?? c.freq) + dir * stepOf(e)));
+}
+function tuneChan(c, f) {
+  // affichage immédiat, envoi au moteur au plus toutes les 80 ms
+  c.pendingFreq = f; c.freq = f; c.lastTune = Date.now(); refreshCard(c); placeMarkers();
+  if (c.tuneTimer) return;
+  c.tuneTimer = setTimeout(() => {
+    c.tuneTimer = null;
+    send({ t: 'retune', ch: c.id, freq: c.pendingFreq });
+  }, 80);
+}
+function snapSpec(c, f) {
+  // dans le mini-spectre, on s'accroche au pic le plus proche (±15 Hz) s'il est net
+  const v = c.specBins, [a, b] = c.specRange; if (!v) return f;
+  const n = v.length, i0 = Math.round((f - a) / (b - a) * n), w = Math.max(1, Math.round(15 / ((b - a) / n)));
+  let bi = -1, bv = -1;
+  for (let i = Math.max(0, i0 - w); i <= Math.min(n - 1, i0 + w); i++) if (v[i] > bv) { bv = v[i]; bi = i; }
+  const sorted = Array.from(v).sort((p, q) => p - q), floor = sorted[Math.floor(n * .5)];
+  if (bi < 0 || bv < floor + 12) return f;
+  return a + (bi + .5) / n * (b - a);
+}
+function onSpecFrame(buf) {
+  const dv = new DataView(buf);
+  const id = new TextDecoder().decode(new Uint8Array(buf, 1, 8)).replace(/\0+$/, '').trim();
+  const c = S.chans.get(id); if (!c || !c.spec) return;
+  const f0 = dv.getFloat64(9, true), f1 = dv.getFloat64(17, true), mk = dv.getFloat64(25, true);
+  const v = new Uint8Array(buf, 33);
+  c.specRange = [f0, f1]; c.specBins = v; c.lockFreq = mk;
+  drawSpec(c);
+}
+function drawSpec(c) {
+  const cv = c.spec, dpr = devicePixelRatio || 1, r = cv.getBoundingClientRect();
+  const w = Math.max(50, Math.round(r.width * dpr)), h = Math.max(20, Math.round(r.height * dpr));
+  if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+  const ctx = cv.getContext('2d'), v = c.specBins, [a, b] = c.specRange, n = v.length;
+  ctx.fillStyle = '#101A23'; ctx.fillRect(0, 0, w, h);
+  const sorted = Array.from(v).sort((p, q) => p - q);
+  const lo = sorted[Math.floor(n * .2)] - 4, hi = Math.max(sorted[n - 1], lo + 30);
+  const Y = x => h - 2 - Math.max(0, Math.min(1, (x - lo) / (hi - lo))) * (h - 6 * dpr);
+  // bande du décodeur
+  const m = S.byId[c.mode], bw = m.whole ? 0 : c.bw || 100;
+  const X = f => (f - a) / (b - a) * w;
+  if (bw) { ctx.fillStyle = c.color + '30'; ctx.fillRect(X(c.freq - bw / 2), 0, X(c.freq + bw / 2) - X(c.freq - bw / 2), h); }
+  ctx.beginPath(); ctx.moveTo(0, h);
+  for (let i = 0; i < n; i++) ctx.lineTo(i / (n - 1) * w, Y(v[i]));
+  ctx.lineTo(w, h); ctx.closePath(); ctx.fillStyle = '#C9A24A40'; ctx.fill();
+  ctx.beginPath();
+  for (let i = 0; i < n; i++) { const x = i / (n - 1) * w, y = Y(v[i]); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+  ctx.strokeStyle = '#E3C77E'; ctx.lineWidth = dpr; ctx.stroke();
+  if (!m.whole) {
+    ctx.strokeStyle = c.color; ctx.lineWidth = 2 * dpr;           // fréquence demandée
+    ctx.beginPath(); ctx.moveTo(X(c.freq), 0); ctx.lineTo(X(c.freq), h); ctx.stroke();
+    if (c.lockFreq && Math.abs(c.lockFreq - c.freq) > 0.5) {         // où le décodeur s'est calé
+      ctx.setLineDash([3 * dpr, 3 * dpr]); ctx.strokeStyle = '#FFFFFF';
+      ctx.beginPath(); ctx.moveTo(X(c.lockFreq), 0); ctx.lineTo(X(c.lockFreq), h); ctx.stroke(); ctx.setLineDash([]);
+    }
+  }
+  const span = b - a;
+  c.specRead.textContent = m.whole ? '' : `${Math.round(span)} Hz · ${(span / (r.width || 1)).toFixed(1)} Hz/pixel`;
 }
 function refreshCard(c) {
-  if (document.activeElement !== c.freqIn) c.freqIn.value = fmtKHz(c.freq);
+  if (document.activeElement !== c.freqIn) c.freqIn.value = audioOnly() ? Math.round(c.freq) : fmtKHz(c.freq);
+  c.card.querySelector('.unit').textContent = audioOnly() ? 'Hz audio' : 'kHz';
   c.stateEl.textContent = c.paused ? 'en pause' : c.state;
   c.pauseBtn.textContent = c.paused ? 'Reprendre' : 'Pause';
   c.card.classList.toggle('paused', !!c.paused);
@@ -272,6 +416,8 @@ function wfResize() {
   drawScale(); placeMarkers();
 }
 function fmtKHz(f) { return (f / 1000).toLocaleString('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 3 }); }
+const audioOnly = () => !!(S.server && S.server.shared && S.server.nodial);
+function fmtF(f) { return audioOnly() ? `${Math.round(f)} Hz` : `${fmtKHz(f)} kHz`; }
 function niceStep(span, px) {
   const target = span / Math.max(2, px / 110);
   const p = Math.pow(10, Math.floor(Math.log10(target)));
@@ -287,7 +433,7 @@ function drawScale() {
   for (let f = Math.ceil(f0 / step) * step; f <= f1; f += step) {
     const x = Math.round((f - f0) / (f1 - f0) * w) + .5;
     ctx.strokeStyle = '#5E7487'; ctx.beginPath(); ctx.moveTo(x, scaleH); ctx.lineTo(x, scaleH - 6 * dpr); ctx.stroke();
-    ctx.fillStyle = '#8394A5'; ctx.fillText(fmtKHz(f), x, scaleH / 2 - 2 * dpr);
+    ctx.fillStyle = '#8394A5'; ctx.fillText(audioOnly() ? String(Math.round(f)) : fmtKHz(f), x, scaleH / 2 - 2 * dpr);
   }
   ctx.strokeStyle = '#2C3C4C'; ctx.beginPath(); ctx.moveTo(0, scaleH - .5); ctx.lineTo(w, scaleH - .5); ctx.stroke();
 }
@@ -296,6 +442,7 @@ function onWfFrame(buf) {
   const dv = new DataView(buf);
   if (dv.getUint8(0) !== 1) return;
   const lf0 = dv.getFloat64(1, true), lf1 = dv.getFloat64(9, true);
+  if (lf1 < S.view[0] || lf0 > S.view[1]) return;
   const bins = new Uint8Array(buf, 17);
   const n = bins.length, { ctx, w, h, scaleH } = WF, [v0, v1] = S.view;
   const row = new Float32Array(w);
@@ -313,6 +460,7 @@ function onWfFrame(buf) {
   WF.floor = WF.floor == null ? fl : WF.floor * .9 + fl * .1;
   WF.peak = WF.peak == null ? pk : WF.peak * .9 + pk * .1;
   WF.lastRow = row;
+  if (WF.warm > 0) { WF.warm--; return; }     // quelques lignes pour estimer bruit et crête avant d'afficher
   ctx.drawImage(WF.c, 0, scaleH, w, h - scaleH - 1, 0, scaleH + 1, w, h - scaleH - 1);
   const img = ctx.createImageData(w, 1), lut = WF.lut;
   const span = Math.max(6, WF.peak - WF.floor + 4) / (S.ui.contrast || 1), base = WF.floor + (S.ui.floor || 0) * .5;
@@ -353,12 +501,13 @@ function placeMarkers() {
     const xa = xOfFreq(a), xb = xOfFreq(b);
     if (xb < 0 || xa > WF.c.getBoundingClientRect().width) continue;
     const width = Math.max(4, xb - xa);
-    const mk = el('div', { class: 'marker', style: `left:${xa}px;width:${width}px`, title: `${m.label} ${fmtKHz(c.freq)} kHz : glisser pour réaccorder` },
+    const mk = el('div', { class: 'marker', style: `left:${xa}px;width:${width}px`, title: `${m.label} ${fmtF(c.freq)} : glisser pour réaccorder` },
       el('div', { class: 'band', style: `background:${c.color}` }),
       el('div', { class: 'edge', style: `left:0;border-color:${c.color}` }),
       el('div', { class: 'edge', style: `right:0;border-color:${c.color}` }),
       el('div', { class: 'tag', style: `background:${c.color}`, text: m.label }));
-    mk.addEventListener('mousedown', e => startDrag(e, c, mk));
+    mk.addEventListener('mousedown', e => { setActive(c.id); startDrag(e, c, mk); });
+    if (c.id === S.active) mk.classList.add('active');
     box.append(mk);
   }
 }
@@ -381,12 +530,12 @@ function sendView() {
 }
 function setView(f0, f1) {
   const s = S.server; if (s.basefreq == null) return;
-  const lo = s.basefreq, hi = s.basefreq + s.total_bandwidth, minSpan = 3000;
+  const lo = s.basefreq, hi = s.basefreq + s.total_bandwidth, minSpan = s.shared ? 400 : 3000;
   let span = Math.max(minSpan, Math.min(hi - lo, f1 - f0));
   f0 = Math.max(lo, Math.min(hi - span, f0)); f1 = f0 + span;
   S.view = [f0, f1];
   WF.ctx.fillStyle = '#0D151D'; WF.ctx.fillRect(0, WF.scaleH, WF.w, WF.h - WF.scaleH);
-  WF.floor = WF.peak = null;
+  WF.floor = WF.peak = null; WF.warm = 4;
   drawScale(); placeMarkers(); sendView();
 }
 function zoom(factor, center) {
@@ -421,7 +570,17 @@ function initWaterfall() {
     if (!S.view || e.target.closest('.marker, .zoom, .wf-overlay') || !e.target.closest('#wfWrap')) return;
     const m = S.byId[S.mode]; if (!m) return;
     let f = freqAtX(e.clientX);
-    if (m.whole) {
+    const hzPerPx = (S.view[1] - S.view[0]) / WF.c.getBoundingClientRect().width;
+    if (!m.whole && hzPerPx > 20) {
+      // résolution trop faible pour viser un signal : on zoome autour du clic, le clic suivant ouvrira le canal
+      const span = Math.max(2000, WF.c.getBoundingClientRect().width * 8);
+      setView(f - span / 2, f + span / 2);
+      toast('Zoom sur le signal : cliquez dessus pour ouvrir le canal.');
+      return;
+    }
+    if (m.whole && S.server.shared) {
+      f = S.server.basefreq;
+    } else if (m.whole) {
       const near = S.catalog.presets.filter(p => p.mode === m.id).map(p => p.freq).find(p => f >= p - 500 && f <= p + 3500);
       f = near ?? Math.round(f - 1500);
     } else {
@@ -434,10 +593,15 @@ function initWaterfall() {
     if (!S.view) return;
     const r = wrap.getBoundingClientRect();
     hover.style.display = 'block'; hover.style.left = (e.clientX - r.left) + 'px';
-    hover.textContent = `${fmtKHz(freqAtX(e.clientX))} kHz`;
+    hover.textContent = fmtF(freqAtX(e.clientX));
   });
   wrap.addEventListener('mouseleave', () => { hover.style.display = 'none'; });
-  wrap.addEventListener('wheel', e => { e.preventDefault(); zoom(e.deltaY < 0 ? 0.7 : 1 / 0.7, freqAtX(e.clientX)); }, { passive: false });
+  wrap.addEventListener('wheel', e => {
+    e.preventDefault();
+    const c = S.chans.get(S.active);
+    if (e.ctrlKey || !c || S.byId[c.mode]?.whole) zoom(e.deltaY < 0 ? 0.7 : 1 / 0.7, freqAtX(e.clientX));
+    else wheelTune(c, e);
+  }, { passive: false });
   $('#zoomIn').onclick = () => zoom(0.5);
   $('#zoomOut').onclick = () => zoom(2);
   $('#zoomAll').onclick = () => { const s = S.server; if (s.basefreq != null) setView(s.basefreq, s.basefreq + s.total_bandwidth); };
@@ -455,12 +619,23 @@ function toast(text, cls = '') {
 }
 function wire() {
   $('#modeSearch').addEventListener('input', renderModes);
-  $('#serverSel').onchange = e => send({ t: 'select_server', index: +e.target.value });
+  $('#sourceSel').onchange = e => send({ t: 'select_source', id: e.target.value });
+  $('#dialIn').addEventListener('keydown', e => {
+    if (e.key !== 'Enter') return;
+    const v = parseFloat($('#dialIn').value.replace(/\s/g, '').replace(',', '.'));
+    if (!isNaN(v)) send({ t: 'qsy', freq: v * 1000 });
+    $('#dialIn').blur();
+  });
+  $('#srcAdd').onclick = () => {
+    const type = $('#srcNewType').value;
+    const base = { phantom: { url: 'http://' }, tci: { url: 'ws://127.0.0.1:50001', trx: 0 }, audio: { device: '', rigctl: '' } }[type];
+    S.sources.push({ id: Math.random().toString(36).slice(2, 8), type, name: S.types[type].split(' (')[0], ...base });
+    send({ t: 'sources_set', sources: S.sources });
+  };
   $('#rxSel').onchange = e => send({ t: 'select_rx', rx: e.target.value });
   $('#presetBtn').onclick = e => { e.stopPropagation(); $('#presetMenu').hidden = !$('#presetMenu').hidden; };
   document.addEventListener('click', e => { if (!e.target.closest('.menu-wrap')) $('#presetMenu').hidden = true; });
-  $('#settingsBtn').onclick = () => $('#settings').showModal();
-  $('#srvAdd').onclick = () => { S.servers.push({ name: 'Nouveau', url: 'http://' }); renderServers(); };
+  $('#settingsBtn').onclick = () => { send({ t: 'audio_inputs' }); $('#settings').showModal(); };
   $('#setPalette').onchange = e => { S.ui.palette = e.target.value; buildLut(); savePrefs(); };
   $('#setContrast').oninput = e => { S.ui.contrast = +e.target.value; savePrefs(); };
   $('#setFloor').oninput = e => { S.ui.floor = +e.target.value; savePrefs(); };
