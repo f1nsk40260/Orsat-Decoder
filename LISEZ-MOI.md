@@ -16,13 +16,15 @@ Avec TCI et l'entrée audio, tous les canaux partagent l'audio BLU du récepteur
 
 ## Installation
 
+Copiez cette ligne dans un terminal :
+
 ```bash
-git clone https://github.com/f1nsk40260/Orsat-Decoder.git
-cd Orsat-Decoder
-./install.sh
+curl -fsSL https://raw.githubusercontent.com/f1nsk40260/Orsat-Decoder/main/get.sh | bash
 ```
 
-Mise à jour : `cd Orsat-Decoder && git pull && ./install.sh`.
+C'est tout : ni git, ni compte GitHub. Seul le mot de passe de votre session Linux peut être demandé (sudo), une fois, s'il manque des paquets.
+
+**Mise à jour** : la même ligne. La configuration et les canaux sont conservés.
 
 L'installateur :
 - installe Python et un compilateur C s'ils manquent (sudo demandé une fois) ;
