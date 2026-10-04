@@ -7,7 +7,8 @@ Orsat-Decoder se connecte au serveur comme la page web : il affiche son waterfal
 ## Installation
 
 ```bash
-cd orsat-decoder
+git clone https://github.com/f1nsk40260/Orsat-Decoder.git
+cd Orsat-Decoder
 ./install.sh
 ```
 
