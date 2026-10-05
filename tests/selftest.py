@@ -48,7 +48,13 @@ def check_ft8():
         out = subprocess.run([str(dec), str(p)], capture_output=True, text=True).stdout
     ok = "CQ F1NSK JN03" in out
     print(f"  {'OK ' if ok else 'ÉCHEC'}  FT8         -14 dB   {'décodé' if ok else 'non décodé'}")
-    return ok
+    # Comme en direct : le créneau reçu n'a jamais exactement 15 s (blocs FLAC de 420, etc.)
+    from orsatdec.decoders.ft8 import FT8
+    d = FT8(FS, 1500)
+    d._decode(np.concatenate([x, np.zeros(420)]), 0)
+    ok2 = any("CQ F1NSK JN03" in r["text"] for r in d.results)
+    print(f"  {'OK ' if ok2 else 'ÉCHEC'}  FT8 direct  -14 dB   {'décodé' if ok2 else 'non décodé (créneau trop long)'}")
+    return ok and ok2
 
 
 def check_flac():

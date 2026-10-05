@@ -7,6 +7,7 @@ import tempfile
 import threading
 import time
 import wave
+import logging
 from pathlib import Path
 
 import numpy as np
@@ -14,6 +15,7 @@ from scipy.signal import resample_poly
 
 from ..dsp import Decoder
 
+log = logging.getLogger("orsat.ft8")
 NATIVE = Path(os.environ.get("ORSAT_NATIVE", Path(__file__).resolve().parents[2] / "native" / "bin"))
 LINE = re.compile(r"^(\d{6})\s+([+-]?\d+(?:\.\d+)?)\s+([+-]?\d+\.\d+)\s+(\d+)\s+~\s+(.*\S)\s*$")
 
@@ -66,6 +68,10 @@ class FT8(Decoder):
             return
         if abs(self.fs - 12000) > 1:
             audio = resample_poly(audio, 12000, int(round(self.fs)))
+        # ft8_lib refuse tout fichier plus long qu'un créneau (15 s ou 7,5 s exactement) : en direct,
+        # le créneau contient toujours quelques échantillons de trop (blocs audio de 420, 512…).
+        n = int(round(self.period * 12000))
+        audio = audio[:n] if len(audio) >= n else np.concatenate([audio, np.zeros(n - len(audio))])
         audio = audio / (np.max(np.abs(audio)) + 1e-9) * 0.9
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
             path = f.name
@@ -75,8 +81,12 @@ class FT8(Decoder):
             w.writeframes((audio * 32767).astype("<i2").tobytes())
             w.close()
             args = [str(self.decoder)] + (["-ft4"] if self.ft4 else []) + [path]
-            out = subprocess.run(args, capture_output=True, text=True, timeout=30).stdout
+            r = subprocess.run(args, capture_output=True, text=True, timeout=30)
+            out = r.stdout
+            if r.returncode != 0 or "ERROR" in r.stderr:
+                log.warning("%s : décodeur natif en échec (%s) : %s", self.name, r.returncode, r.stderr.strip()[-200:])
         except Exception as e:
+            log.warning("%s : décodeur natif : %s", self.name, e)
             out = ""
         finally:
             try:
