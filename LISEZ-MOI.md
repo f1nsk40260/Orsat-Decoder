@@ -70,6 +70,7 @@ Dans une carte de canal : fréquence modifiable au clavier, paramètres du mode,
 | `orsat-decoder --check` | autotest des décodeurs (sans serveur) |
 | `orsat-decoder --lan` | interface accessible depuis le réseau local (`http://ip:8074/`) |
 | `orsat-decoder --log` | journal de la dernière session |
+| `orsat-decoder --identify fichier.wav [FREQ_kHz]` | identifie le signal d'un enregistrement (base Artemis / sigidwiki) et le confirme en le décodant |
 | `orsat-decoder --probe URL FREQ_kHz` | diagnostic de connexion : ce que le serveur envoie, niveau, enregistrement de 12 s dans `~/orsat-probe.wav` |
 
 Les serveurs Orsat-SDR récents refusent les clients qui ne déclarent pas leur version (`min_client_version`). Orsat-Decoder la déclare (`?v=2`) automatiquement quand le serveur l'exige.
@@ -92,6 +93,13 @@ Les modes MFSK, Olivia et MT63 suivent l'émetteur de fldigi bit pour bit (véri
 
 **Images** : elles s'affichent dans la carte du canal au fil de la réception. Le fax démarre seul sur la tonalité de départ et se cale sur les lignes de phasage ; pris en cours de route, il démarre quand même et s'aligne sur le cadre de la carte. Le SSTV démarre sur le code VIS. Chaque image terminée est enregistrée en PNG dans `~/Orsat-Decoder/images/` ; le bouton Enregistrer télécharge la dernière. Le Hell s'affiche comme une bande, ligne après ligne, imprimée deux fois en hauteur comme sur un vrai téléscripteur Hell.
 
+## Identification automatique
+
+`orsat-decoder --identify` mesure le signal (largeur, tonalités, vitesse, PSK, ACF), le compare aux
+257 signaux de bande audio de la base [Artemis](https://github.com/AresValley/Artemis) (sigidwiki),
+puis fait tourner les décodeurs des meilleurs candidats : un texte lisible confirme le mode.
+Détails, taux de réussite et nouveaux décodeurs suggérés par la base : [docs/ARTEMIS.md](docs/ARTEMIS.md).
+
 ## Limite de connexions
 
 Chaque canal est un auditeur pour le serveur. Un PhantomSDR-Plus limite en général à **3 auditeurs par adresse IP** (`per_ip` dans `config.toml`).
@@ -103,6 +111,8 @@ Lancé **sur la machine du serveur**, Orsat-Decoder n'a pas cette limite. S'il t
 - `tests/selftest.py` : autotest rapide.
 - `tests/harness.py` : banc de mesure de sensibilité.
 - `tests/bandgen.py` : génère une bande HF synthétique en IQ pour alimenter un `spectrumserver` (driver `stdin`, `f32`, `iq`) et tester tout le logiciel sans antenne.
+- `tests/artemis_bench.py`, `tests/sigid_eval.py`, `tests/test_sigid.py` : décodeurs sur les enregistrements réels d'Artemis, taux d'identification.
+- `tools/make_sigid.py` : régénère la base d'identification `orsatdec/data/sigid.json`.
 - `tests/fake_tci.py` : faux serveur TCI (audio et VFO) pour tester la source TCI sans AetherSDR.
 - `orsatdec/sources.py` : les sources ; `orsatdec/codecs.py` : décodage FLAC et Opus.
 - `orsatdec/decoders/` : un fichier par famille de décodeurs.

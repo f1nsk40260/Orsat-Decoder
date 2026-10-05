@@ -567,8 +567,13 @@ def main():
     ap.add_argument("--no-autoquit", action="store_true", help="ne pas s'arrêter quand la fenêtre est fermée")
     ap.add_argument("--probe", nargs="+", metavar=("ADRESSE", "FREQ_KHZ"),
                     help="diagnostic : se connecte à un serveur PhantomSDR, mesure l'audio reçu et l'enregistre")
+    ap.add_argument("--identify", nargs="+", metavar=("FICHIER.wav", "FREQ_KHZ"),
+                    help="identifie le signal d'un enregistrement audio (base Artemis / sigidwiki)")
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args()
+    if args.identify:
+        from .signal_id import identify_file
+        raise SystemExit(identify_file(args.identify[0], float(args.identify[1]) if len(args.identify) > 1 else None))
     if args.probe:
         from .probe import probe
         raise SystemExit(asyncio.run(probe(args.probe[0], float(args.probe[1]) * 1000 if len(args.probe) > 1 else None)))

@@ -120,6 +120,14 @@ def main():
     except Exception as e:
         print(f"  ÉCHEC  images     {e}")
         results.append(False)
+    try:
+        for label, fn in importlib.import_module("test_sigid").selftest_cases():
+            ok, detail = fn()
+            print(f"  {'OK ' if ok else 'ÉCHEC'}  {label:<16} {detail}")
+            results.append(ok)
+    except Exception as e:
+        print(f"  ÉCHEC  identification {e}")
+        results.append(False)
     n = sum(results)
     print(f"{n}/{len(results)} décodeurs validés.")
     return 0 if n == len(results) else 1

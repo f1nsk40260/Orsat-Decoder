@@ -93,6 +93,10 @@ cat > "$BINDIR/orsat-decoder" <<EOF
 #!/usr/bin/env bash
 # Orsat-Decoder — lanceur
 export ORSAT_DATA="$APPDIR"
+# --identify FICHIER : chemin rendu absolu avant de changer de dossier
+if [ "\${1:-}" = "--identify" ] && [ -n "\${2:-}" ]; then
+  set -- "\$1" "\$(realpath -- "\$2")" "\${@:3}"
+fi
 cd "$APPDIR"
 case "\${1:-}" in
   --check) exec "$APPDIR/venv/bin/python" tests/selftest.py ;;
