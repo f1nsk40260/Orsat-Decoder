@@ -2,7 +2,7 @@
 
 Sources : serveur PhantomSDR / Orsat-SDR, TCI (AetherSDR…), entrée audio PipeWire (+ CAT rigctld).
 Chaque canal = un décodeur dans son propre fil d'exécution.
-Configuration et canaux mémorisés dans ~/.config/orsat-decoder/config.json.
+Tout est dans ~/Orsat-Decoder : logiciel, environnement Python, config.json (serveurs, canaux), journal.
 """
 import argparse
 import asyncio
@@ -27,9 +27,9 @@ from .sources import make_source, list_audio_inputs, TYPES
 
 HERE = Path(__file__).resolve().parent
 WEB = HERE.parent / "web"
-CONF_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "orsat-decoder"
+DATA = Path(os.environ.get("ORSAT_DATA", Path.home() / "Orsat-Decoder"))
+CONF_DIR = DATA
 CONF_FILE = CONF_DIR / "config.json"
-DATA = Path(os.environ.get("ORSAT_DATA", Path.home() / ".local/share/orsat-decoder"))
 log = logging.getLogger("orsat")
 
 DEFAULT_SOURCES = [

@@ -8,7 +8,8 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-APPDIR="${ORSAT_DATA:-$HOME/.local/share/orsat-decoder}"
+APPDIR="${ORSAT_DATA:-$HOME/Orsat-Decoder}"   # tout est là : logiciel, venv, config, journal
+OLDDIR="$HOME/.local/share/orsat-decoder"     # emplacement des versions précédentes
 BINDIR="$HOME/.local/bin"
 DESKDIR="$HOME/.local/share/applications"
 ICONDIR="$HOME/.local/share/icons/hicolor/scalable/apps"
@@ -44,19 +45,34 @@ import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)
 PY
 
 # -------------------------------------------------------------------------------------
-step "2/5  Copie du logiciel"
+step "2/5  Copie du logiciel dans $APPDIR"
 mkdir -p "$APPDIR"
-rm -rf "$APPDIR/app.new"
-mkdir -p "$APPDIR/app.new"
-cp -a "$HERE/orsatdec" "$HERE/web" "$HERE/native" "$HERE/tests" "$APPDIR/app.new/"
-find "$APPDIR/app.new" -name __pycache__ -prune -exec rm -rf {} +
-rm -rf "$APPDIR/app"
-mv "$APPDIR/app.new" "$APPDIR/app"
-info "Installé dans $APPDIR/app"
+if [ "$(cd "$APPDIR" && pwd -P)" != "$(cd "$HERE" && pwd -P)" ]; then
+  for d in orsatdec web native tests; do
+    rm -rf "$APPDIR/$d.new"
+    cp -a "$HERE/$d" "$APPDIR/$d.new"
+    rm -rf "$APPDIR/$d"
+    mv "$APPDIR/$d.new" "$APPDIR/$d"
+  done
+  for f in install.sh get.sh uninstall.sh LISEZ-MOI.md .gitignore; do
+    [ -f "$HERE/$f" ] && cp "$HERE/$f" "$APPDIR/$f"
+  done
+fi
+find "$APPDIR" -name __pycache__ -prune -exec rm -rf {} +
+# reprise des versions précédentes (~/.local/share/orsat-decoder et ~/.config/orsat-decoder)
+if [ ! -f "$APPDIR/config.json" ] && [ -f "$HOME/.config/orsat-decoder/config.json" ]; then
+  cp "$HOME/.config/orsat-decoder/config.json" "$APPDIR/config.json" && info "Configuration reprise de ~/.config/orsat-decoder"
+fi
+[ -f "$APPDIR/config.json" ] && rm -rf "$HOME/.config/orsat-decoder"
+if [ -d "$OLDDIR" ] && [ "$(cd "$OLDDIR" && pwd -P)" != "$(cd "$APPDIR" && pwd -P)" ]; then
+  [ -d "$OLDDIR/browser-profile" ] && [ ! -d "$APPDIR/browser-profile" ] && mv "$OLDDIR/browser-profile" "$APPDIR/"
+  rm -rf "$OLDDIR" && info "Ancienne installation (~/.local/share/orsat-decoder) supprimée"
+fi
+info "Installé dans $APPDIR"
 
 # -------------------------------------------------------------------------------------
 step "3/5  Décodeurs natifs (ft8_lib)"
-"$APPDIR/app/native/build.sh" >"$APPDIR/build.log" 2>&1 || { tail -20 "$APPDIR/build.log"; fail "compilation des décodeurs natifs."; }
+"$APPDIR/native/build.sh" >"$APPDIR/build.log" 2>&1 || { tail -20 "$APPDIR/build.log"; fail "compilation des décodeurs natifs."; }
 info "$(tail -1 "$APPDIR/build.log")"
 
 # -------------------------------------------------------------------------------------
@@ -77,7 +93,7 @@ cat > "$BINDIR/orsat-decoder" <<EOF
 #!/usr/bin/env bash
 # Orsat-Decoder — lanceur
 export ORSAT_DATA="$APPDIR"
-cd "$APPDIR/app"
+cd "$APPDIR"
 case "\${1:-}" in
   --check) exec "$APPDIR/venv/bin/python" tests/selftest.py ;;
   --log)   exec \${PAGER:-less} "$APPDIR/orsat-decoder.log" ;;

@@ -28,12 +28,23 @@ C'est tout : ni git, ni compte GitHub. Seul le mot de passe de votre session Lin
 
 L'installateur :
 - installe Python et un compilateur C s'ils manquent (sudo demandé une fois) ;
-- crée son environnement Python dans `~/.local/share/orsat-decoder` ;
+- installe tout dans le dossier **`~/Orsat-Decoder`** de votre dossier personnel (créé s'il n'existe pas) ;
+- y crée son environnement Python (`venv/`) ;
 - compile les décodeurs natifs embarqués ;
 - ajoute **Orsat-Decoder** au menu des applications ;
 - termine par un autotest de chaque décodeur.
 
-Relancer `./install.sh` met à jour en gardant la configuration et les canaux.
+Contenu de `~/Orsat-Decoder` :
+
+```
+orsatdec/  web/  native/  tests/   le logiciel
+venv/                              son environnement Python
+config.json                        vos sources, canaux et réglages
+orsat-decoder.log                  journal de la dernière session
+install.sh  get.sh  uninstall.sh   installation, mise à jour, désinstallation
+```
+
+Le lanceur `orsat-decoder` est dans `~/.local/bin`, l'entrée de menu dans `~/.local/share/applications`. Une installation d'une version précédente (dans `~/.local/share/orsat-decoder`) est reprise et nettoyée automatiquement.
 
 ## Utilisation
 
