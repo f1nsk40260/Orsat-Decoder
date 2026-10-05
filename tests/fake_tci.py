@@ -6,6 +6,7 @@ du VFO, et accepte les commandes vfo / modulation / audio_start.
     python tests/fake_tci.py [port]          (défaut 50001)
 """
 import asyncio
+import os
 import struct
 import sys
 from pathlib import Path
@@ -24,6 +25,23 @@ STATIONS = [
     (7_071_500, lambda: rtty_encode("RYRYRY CQ DE F1NSK TCI RTTY TEST ", fs=FS, af=AF0)),
     (7_069_900, lambda: cw_encode("CQ CQ DE F1NSK TCI K", fs=FS, af=AF0, wpm=22)),
 ]
+
+# Jeux de mires du jalon 2 : FAKE_TCI_SET=texte (cadran 14070 kHz) ou images (cadran 14230 kHz)
+if os.environ.get("FAKE_TCI_SET") == "texte":
+    from orsatdec.gen.mfsk import mfsk_encode
+    from orsatdec.gen.olivia import olivia_encode
+    from orsatdec.gen.images import hell_encode
+    STATIONS = [
+        (14_071_000, lambda: np.concatenate([np.zeros(FS * 8), mfsk_encode("CQ CQ DE F1NSK MFSK16 TEST ORSAT DECODER K ", fs=FS, af=AF0)])),
+        (14_072_000, lambda: olivia_encode("CQ DE F1NSK OLIVIA 8/250 ORSAT ", fs=FS, af=AF0, tones=8, bw=250)),
+        (14_072_700, lambda: hell_encode("CQ CQ DE F1NSK FELD HELL ", fs=FS, af=AF0)),
+    ]
+elif os.environ.get("FAKE_TCI_SET") == "images":
+    from orsatdec.gen.images import sstv_encode, test_image, wefax_encode, chart_image
+    STATIONS = [
+        (14_231_900, lambda: sstv_encode(test_image(320, 240), mode="robot36", fs=FS, af=AF0)),
+        (14_229_900, lambda: wefax_encode(chart_image(1809, 80), fs=FS, af=AF0, phasing=10)),
+    ]
 
 
 class Air:

@@ -104,6 +104,12 @@ input[type=search]::placeholder { color: var(--muted); }
   word-break: break-word; background: #17222D; border-top: 1px solid var(--line); scrollbar-width: thin; }
 .chan .out:empty::before { content: "En attente de signal…"; color: var(--muted); font-family: var(--font); font-size: 13px; }
 .chan .out .call { color: var(--gold); }
+.chan .out.img { white-space: normal; padding: 8px; }
+.chan .out.img:empty::before { content: "En attente d'une image…"; }
+.chan .pic { margin: 0 0 12px; }
+.chan .pic canvas { display: block; width: 100%; height: auto; image-rendering: auto; background: #000; }
+.chan .pic figcaption { font: 12px var(--font); color: var(--muted); margin-bottom: 4px; }
+.chan .pic.tape canvas { width: auto; max-width: 100%; margin-bottom: 3px; }
 .chan.paused .out { opacity: .5; }
 table.msgs { width: 100%; border-collapse: collapse; font: 13.5px/1.45 var(--mono); }
 table.msgs td { padding: 1px 6px 1px 0; white-space: nowrap; }

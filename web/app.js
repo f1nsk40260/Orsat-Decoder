@@ -56,6 +56,7 @@ const H = {
   chan_removed(m) { removeChanCard(m.ch); },
   text(m) { const c = S.chans.get(m.ch); if (c) writeText(c, m.text); },
   msg(m) { const c = S.chans.get(m.ch); if (c) writeMsg(c, m); },
+  img(m) { const c = S.chans.get(m.ch); if (c) onImage(c, m); },
   cstat(m) { const c = S.chans.get(m.ch); if (c) updateStat(c, m); },
   notice(m) { toast(m.text, m.level === 'error' ? 'error' : ''); },
   audio_inputs(m) { S.inputs = m.inputs || []; renderSources(); },
@@ -227,9 +228,12 @@ function buildCard(c) {
   const pause = el('button', { class: 'icon-btn small', type: 'button', title: 'Pause' });
   pause.onclick = () => send({ t: 'pause', ch: c.id, paused: !c.paused });
   const clear = el('button', { class: 'icon-btn small', type: 'button', title: 'Effacer le texte', text: 'Effacer' });
-  clear.onclick = () => { c.out.replaceChildren(); c.cur = null; c.table = null; };
-  const save = el('button', { class: 'icon-btn small', type: 'button', title: 'Enregistrer le texte', text: 'Enregistrer' });
-  save.onclick = () => saveText(c);
+  clear.onclick = () => { c.out.replaceChildren(); c.cur = null; c.table = null; c.pic = null; };
+  const isImg = m.kind === 'img';
+  if (isImg) clear.title = 'Effacer les images';
+  const save = el('button', { class: 'icon-btn small', type: 'button', text: 'Enregistrer',
+    title: isImg ? 'Télécharger la dernière image (PNG)' : 'Enregistrer le texte' });
+  save.onclick = () => isImg ? saveImage(c) : saveText(c);
   const close = el('button', { class: 'icon-btn small', type: 'button', title: 'Fermer le canal', text: '✕' });
   close.onclick = () => send({ t: 'remove', ch: c.id });
   const meters = el('div', { class: 'meters' });
@@ -241,7 +245,7 @@ function buildCard(c) {
     params.append(el('label', {}, p.label, sel));
     (c.paramSel ||= {})[p.key] = [sel, p];
   }
-  const out = el('div', { class: 'out', tabindex: '0' });
+  const out = el('div', { class: isImg ? 'out img' : 'out', tabindex: '0' });
   const spec = el('canvas', { class: 'spec', title: 'Spectre du canal : cliquez sur le signal, ou molette pour accorder (Maj : 1 Hz, Alt : 100 Hz)' });
   const specWrap = el('div', { class: 'spec-wrap' }, spec, el('div', { class: 'spec-read' }));
   const card = el('article', { class: 'chan', style: `--c:${c.color}` },
@@ -424,6 +428,87 @@ function writeMsg(c, m) {
   c.table.append(tr);
   while (c.table.rows.length > 1500) c.table.deleteRow(0);
   if (atBottom) out.scrollTop = out.scrollHeight;
+}
+// ------------------------------------------------------------------ images (fax, SSTV, Hell)
+const b64bytes = s => { const b = atob(s), u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u; };
+function onImage(c, m) {
+  const out = c.out;
+  const atBottom = out.scrollHeight - out.scrollTop - out.clientHeight < 40;
+  if (m.op === 'new') {
+    const fig = el('figure', { class: m.tape ? 'pic tape' : 'pic' });
+    const cap = el('figcaption', { text: `${m.title || ''}  ·  ${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}` });
+    if (!m.tape) fig.append(cap);
+    c.pic = { ...m, fig, cap, canvas: null, ctx: null, rows: 0, x: 0, cols: 0 };
+    if (!m.tape) newPicCanvas(c.pic, m.h || 400);
+    out.append(fig);
+    while (out.childElementCount > 12) out.firstChild.remove();
+  } else if (m.op === 'saved') {
+    if (c.pic && c.pic.cap) c.pic.cap.textContent += `  ·  enregistrée : ${m.name}`;
+    else toast(`Image enregistrée : ${m.name}`);
+    return;
+  } else if (m.op === 'end') {
+    if (c.pic && !c.pic.tape) c.pic.done = true;
+    return;
+  }
+  const p = c.pic; if (!p) return;
+  if (m.op === 'rows') {
+    const rgb = p.fmt === 'rgb', w = p.w, src = b64bytes(m.data);
+    const need = m.y + m.n;
+    if (need > p.canvas.height) newPicCanvas(p, Math.max(need, Math.ceil(p.canvas.height * 1.5)));
+    const img = p.ctx.createImageData(w, m.n), d = img.data;
+    for (let i = 0, j = 0, k = 0; i < w * m.n; i++, k += 4) {
+      if (rgb) { d[k] = src[j++]; d[k + 1] = src[j++]; d[k + 2] = src[j++]; }
+      else { d[k] = d[k + 1] = d[k + 2] = src[j++]; }
+      d[k + 3] = 255;
+    }
+    p.ctx.putImageData(img, 0, m.y);
+    p.rows = Math.max(p.rows, need);
+  } else if (m.op === 'cols') {
+    const h = p.h, src = b64bytes(m.data), n = m.n;
+    let i = 0;
+    while (i < n) {
+      if (!p.canvas || p.x >= p.canvas.width) {     // nouvelle ligne de bande, comme une ligne de texte (pixels 1:1)
+        const cv = el('canvas', { width: Math.max(300, c.out.clientWidth - 16), height: h });
+        p.canvas = cv; p.ctx = cv.getContext('2d'); p.x = 0;
+        p.ctx.fillStyle = '#fff'; p.ctx.fillRect(0, 0, cv.width, h);
+        p.fig.append(cv);
+        while (p.fig.childElementCount > 60) p.fig.firstChild.remove();
+      }
+      const k = Math.min(n - i, p.canvas.width - p.x);
+      const img = p.ctx.createImageData(k, h), d = img.data;
+      for (let x = 0; x < k; x++) for (let y = 0; y < h; y++) {          // colonnes : haut → bas
+        const v = src[(i + x) * h + y], q = (y * k + x) * 4;
+        d[q] = d[q + 1] = d[q + 2] = v; d[q + 3] = 255;
+      }
+      p.ctx.putImageData(img, p.x, 0);
+      p.x += k; i += k;
+    }
+  }
+  if (atBottom) out.scrollTop = out.scrollHeight;
+}
+function newPicCanvas(p, h) {
+  const cv = el('canvas', { width: p.w, height: h });
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, p.w, h);
+  if (p.canvas) { ctx.drawImage(p.canvas, 0, 0); p.canvas.replaceWith(cv); } else p.fig.append(cv);
+  p.canvas = cv; p.ctx = ctx;
+}
+function saveImage(c) {
+  const p = c.pic; if (!p || !p.canvas) { toast('Aucune image pour l\'instant.'); return; }
+  let cv = p.canvas;
+  if (p.tape) {                                      // toutes les lignes de bande, l'une sous l'autre
+    const all = [...p.fig.querySelectorAll('canvas')];
+    cv = el('canvas', { width: Math.max(...all.map(k => k.width)), height: all.length * p.h });
+    const x = cv.getContext('2d'); all.forEach((k, i) => x.drawImage(k, 0, i * p.h));
+  } else if (p.rows && p.rows < cv.height) {          // sans le bas encore vide
+    const k = el('canvas', { width: p.w, height: p.rows });
+    k.getContext('2d').drawImage(cv, 0, 0); cv = k;
+  }
+  const m = S.byId[c.mode];
+  cv.toBlob(b => {
+    const a = el('a', { href: URL.createObjectURL(b), download: `orsat-${m.id}-${Math.round(c.freq / 1000)}kHz-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}.png` });
+    document.body.append(a); a.click(); a.remove();
+  }, 'image/png');
 }
 function saveText(c) {
   const blob = new Blob([c.out.innerText], { type: 'text/plain;charset=utf-8' });

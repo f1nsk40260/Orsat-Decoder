@@ -27,7 +27,7 @@ def check(label, sig, dec, expected, snr):
     x = add_noise(x, snr, FS, seed=11)
     sc = score(expected, run(dec, x))
     ok = sc >= 0.9
-    print(f"  {'OK ' if ok else 'ÉCHEC'}  {label:<10} {snr:>4} dB   {sc:5.0%}")
+    print(f"  {'OK ' if ok else 'ÉCHEC'}  {label:<16} {snr:>4} dB   {sc:5.0%}")
     return ok
 
 
@@ -95,6 +95,25 @@ def main():
         check_ft8(),
         check_flac(),
     ]
+    # jalon 2 : chaque banc de test fournit ses cas rapides
+    import importlib
+    for name in ("test_mfsk", "test_olivia", "test_mt63"):
+        try:
+            cases = importlib.import_module(name).selftest_cases()
+        except Exception as e:
+            print(f"  ÉCHEC  {name[5:]:<10} {e}")
+            results.append(False)
+            continue
+        for label, sig, dec, expected, snr in cases:
+            results.append(check(label, sig, dec, expected, snr))
+    try:
+        for label, fn in importlib.import_module("test_images").selftest_cases():
+            ok, detail = fn()
+            print(f"  {'OK ' if ok else 'ÉCHEC'}  {label:<16} {detail}")
+            results.append(ok)
+    except Exception as e:
+        print(f"  ÉCHEC  images     {e}")
+        results.append(False)
     n = sum(results)
     print(f"{n}/{len(results)} décodeurs validés.")
     return 0 if n == len(results) else 1

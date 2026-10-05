@@ -23,6 +23,7 @@ from aiohttp import web, WSMsgType
 
 from . import __version__
 from .modes import BY_ID, public_catalog, default_params, bandwidth
+from .images import ImageStore
 from .sources import make_source, list_audio_inputs, TYPES
 
 HERE = Path(__file__).resolve().parent
@@ -103,6 +104,12 @@ class Channel:
         self.last_audio = 0.0                    # instant du dernier bloc audio reçu
         self.ms2 = 0.0                           # puissance audio moyenne (niveau en dBFS)
         self.n_recv = 0                          # échantillons reçus depuis le dernier état
+        self.images = ImageStore(DATA / "images", self._file_label) if self.mode.get("kind") == "img" else None
+
+    def _file_label(self):
+        src = self.app.src
+        f = src.chan_freq(self) if src else self.freq
+        return f"{self.mode['id']}-{f / 1000:.1f}kHz".replace(".", ",")
 
     def describe(self):
         src = self.app.src
@@ -202,6 +209,13 @@ class Channel:
             return
         for ev in events:
             ev = {**ev, "ch": self.id}
+            if ev.get("t") == "img" and self.images is not None:
+                self.app.broadcast(ev)
+                extra = self.images.handle(ev)
+                if extra:
+                    log.info("image enregistrée : %s", extra["path"])
+                    self.app.broadcast({**extra, "ch": self.id})
+                continue
             self.history.append(ev)
             if len(self.history) > 400:
                 del self.history[:100]
@@ -215,6 +229,8 @@ class Channel:
 
     def stop(self):
         self.exec.shutdown(wait=False, cancel_futures=True)
+        if self.images is not None:
+            self.images.handle({"op": "end"})         # image en cours : enregistrée telle quelle
 
 
 class App:
@@ -451,6 +467,9 @@ class App:
         for ch in self.channels.values():
             for ev in ch.history[-150:]:
                 await self._send(ws, json.dumps(ev, ensure_ascii=False, default=_num))
+            if ch.images is not None:
+                for ev in ch.images.replay():
+                    await self._send(ws, json.dumps({**ev, "ch": ch.id}))
 
 
 def make_web(app):

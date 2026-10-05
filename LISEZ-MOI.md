@@ -41,6 +41,7 @@ orsatdec/  web/  native/  tests/   le logiciel
 venv/                              son environnement Python
 config.json                        vos sources, canaux et réglages
 orsat-decoder.log                  journal de la dernière session
+images/                            fax et images SSTV reçus (PNG)
 install.sh  get.sh  uninstall.sh   installation, mise à jour, désinstallation
 ```
 
@@ -73,17 +74,23 @@ Dans une carte de canal : fréquence modifiable au clavier, paramètres du mode,
 
 Les serveurs Orsat-SDR récents refusent les clients qui ne déclarent pas leur version (`min_client_version`). Orsat-Decoder la déclare (`?v=2`) automatiquement quand le serveur l'exige.
 
-## Modes du jalon 1
+## Modes
 
-| Mode | Décodeur | Sensibilité mesurée (bruit dans 2500 Hz) |
+| Famille | Modes | Sensibilité mesurée (bruit dans 2500 Hz) |
 |---|---|---|
-| PSK31 / 63 / 125 | écrit pour Orsat-Decoder | ≈ −11 / −8 / −5 dB |
-| RTTY (45 à 100 bd, shift réglable) | écrit pour Orsat-Decoder | ≈ −8 dB à 45 bd |
-| CW, vitesse automatique 5-60 mpm | écrit pour Orsat-Decoder | ≈ −8 dB à 20 mpm |
-| Navtex / SITOR-B | écrit pour Orsat-Decoder | ≈ −8 dB |
-| FT8 / FT4 | ft8_lib (MIT), embarqué | ≈ −18 dB |
+| PSK | PSK31, 63, 125 | ≈ −11 / −8 / −5 dB |
+| RTTY | 45 à 100 bd, shift réglable | ≈ −8 dB à 45 bd |
+| CW | vitesse automatique 5-60 mpm | ≈ −8 dB à 20 mpm |
+| Maritime | Navtex / SITOR-B | ≈ −8 dB |
+| Signaux faibles | FT8, FT4 (ft8_lib, MIT) | ≈ −18 dB |
+| MFSK | MFSK4 à 128, DominoEX (Micro à 88, FEC MultiPSK en option), THOR (Micro à 100) | MFSK16 −13 dB, THOR 11 −15 dB, DominoEX 11 −13 dB |
+| Olivia | Olivia et Contestia, 4 à 64 tonalités, 125 à 2000 Hz | Olivia 32/1000 −14 dB, 8/250 −16 dB |
+| MT63 | 500, 1000, 2000, entrelacement court ou long | MT63-1000 long −8 dB |
+| Images | Fax météo (IOC 576/288, 60 à 240 l/min), SSTV (Martin, Scottie, Robot, PD, Wraase, code VIS automatique), Hellschreiber (Feld, Slow, X5, X9, FSK Hell, Hell 80) | |
 
-Comparaison faite sur les mêmes enregistrements avec MultiPSK : Orsat-Decoder est meilleur en PSK31, CW et Navtex, et à moins de 1 dB en RTTY.
+Les modes MFSK, Olivia et MT63 suivent l'émetteur de fldigi bit pour bit (vérifié en compilant le code de fldigi). Sur du bruit seul, aucun ne doit rien imprimer : la squelch s'appuie sur le code correcteur de chaque mode. Revers de la médaille : un canal MFSK/THOR qu'on vient d'ouvrir reste muet quelques secondes (7 s en MFSK16), le temps de remplir son désentrelaceur, et MT63 affiche le texte avec une dizaine de secondes de retard.
+
+**Images** : elles s'affichent dans la carte du canal au fil de la réception. Le fax démarre seul sur la tonalité de départ et se cale sur les lignes de phasage ; pris en cours de route, il démarre quand même et s'aligne sur le cadre de la carte. Le SSTV démarre sur le code VIS. Chaque image terminée est enregistrée en PNG dans `~/Orsat-Decoder/images/` ; le bouton Enregistrer télécharge la dernière. Le Hell s'affiche comme une bande, ligne après ligne, imprimée deux fois en hauteur comme sur un vrai téléscripteur Hell.
 
 ## Limite de connexions
 
