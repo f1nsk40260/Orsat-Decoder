@@ -167,13 +167,56 @@ function renderModes() {
 }
 function renderPresets() {
   const menu = $('#presetMenu'); menu.replaceChildren();
-  let grp = null;
+  const q = el('input', { type: 'search', class: 'dir-search', placeholder: 'Chercher un signal, un mode ou une fréquence (kHz)…',
+    autocomplete: 'off', spellcheck: 'false' });
+  const legend = el('div', { class: 'dir-legend' },
+    el('span', { class: 'dec', text: 'décodable' }), el('span', { class: 'nodec', text: 'identifiable seulement (ouvre « Identifier »)' }));
+  const body = el('div', { class: 'dir-body' });
+  menu.append(el('div', { class: 'dir-head' }, q, legend), body);
+  const freqBtn = (f, dec, onclick, title) => el('button', { type: 'button', class: 'fchip ' + (dec ? 'dec' : 'nodec'), title,
+    onclick: e => { e.stopPropagation(); menu.hidden = true; onclick(); } }, fmtKHz(f));
+  const sections = [];
+  // 1. fréquences préréglées (toutes décodables), groupées par mode
+  const pre = el('div', { class: 'dir-sec' }, el('div', { class: 'grp', text: 'Fréquences préréglées' }));
+  const byMode = new Map();
   for (const p of S.catalog.presets) {
-    const label = S.byId[p.mode]?.label || p.mode;
-    if (label !== grp) { grp = label; menu.append(el('div', { class: 'grp', text: label })); }
-    menu.append(el('button', { type: 'button', onclick: () => { menu.hidden = true; usePreset(p); } },
-      el('span', { text: p.label }), el('span', { text: fmtKHz(p.freq) })));
+    if (!byMode.has(p.mode)) byMode.set(p.mode, []);
+    byMode.get(p.mode).push(p);
   }
+  for (const [mode, list] of byMode) {
+    const label = S.byId[mode]?.label || mode;
+    const row = el('div', { class: 'dir-row' }, el('span', { class: 'dir-name dec', text: label }),
+      el('span', { class: 'dir-freqs' }, ...list.map(p => freqBtn(p.freq, true, () => usePreset(p), p.label))));
+    row.dataset.key = (label + ' ' + list.map(p => p.label + ' ' + p.freq / 1000).join(' ')).toLowerCase();
+    pre.append(row);
+  }
+  sections.push(pre);
+  // 2. tous les signaux identifiables de la base Artemis
+  const all = el('div', { class: 'dir-sec' }, el('div', { class: 'grp', text: `Signaux identifiables (base Artemis, ${(S.catalog.directory || []).length})` }));
+  for (const d of S.catalog.directory || []) {
+    const dec = !!d.mode;
+    const mode = dec ? d.mode : 'ident';
+    const ml = dec ? (S.byId[d.mode]?.label || d.mode) : '';
+    const name = el('a', { class: 'dir-name ' + (dec ? 'dec' : 'nodec'), href: `https://www.sigidwiki.com/index.php?curid=${d.id}`,
+      target: '_blank', rel: 'noopener', title: 'Fiche sigidwiki', text: d.title });
+    const freqs = el('span', { class: 'dir-freqs' });
+    for (const f of d.freqs) freqs.append(freqBtn(f, dec, () => usePreset({ mode, freq: f }),
+      dec ? `Ouvrir ${ml} sur ${fmtKHz(f)} kHz` : `Identifier le signal sur ${fmtKHz(f)} kHz`));
+    if (d.range) freqs.append(el('span', { class: 'frange', text: `${fmtKHz(d.range[0])} à ${fmtKHz(d.range[1])} kHz` }));
+    if (!d.freqs.length && !d.range) freqs.append(el('span', { class: 'frange', text: 'fréquence non précisée' }));
+    const row = el('div', { class: 'dir-row' }, el('span', { class: 'dir-title' }, name,
+      dec ? el('span', { class: 'dir-mode', text: ml }) : null), freqs);
+    row.dataset.key = (d.title + ' ' + ml + ' ' + d.freqs.map(f => f / 1000).join(' ')).toLowerCase();
+    all.append(row);
+  }
+  sections.push(all);
+  body.append(...sections);
+  q.addEventListener('click', e => e.stopPropagation());
+  q.addEventListener('input', () => {
+    const t = q.value.trim().toLowerCase().replace(',', '.');
+    for (const r of body.querySelectorAll('.dir-row')) r.hidden = !!t && !r.dataset.key.includes(t);
+    for (const sec of sections) sec.hidden = ![...sec.querySelectorAll('.dir-row')].some(r => !r.hidden);
+  });
 }
 function usePreset(p) {
   if (S.server.shared) { send({ t: 'preset', mode: p.mode, freq: p.freq, params: p.params }); return; }
@@ -837,7 +880,12 @@ function wire() {
     send({ t: 'sources_set', sources: S.sources });
   };
   $('#rxSel').onchange = e => send({ t: 'select_rx', rx: e.target.value });
-  $('#presetBtn').onclick = e => { e.stopPropagation(); $('#presetMenu').hidden = !$('#presetMenu').hidden; };
+  $('#presetBtn').onclick = e => {
+    e.stopPropagation();
+    const m = $('#presetMenu');
+    m.hidden = !m.hidden;
+    if (!m.hidden) m.querySelector('.dir-search')?.focus();
+  };
   document.addEventListener('click', e => { if (!e.target.closest('.menu-wrap')) $('#presetMenu').hidden = true; });
   $('#settingsBtn').onclick = () => { send({ t: 'audio_inputs' }); $('#settings').showModal(); };
   $('#setPalette').onchange = e => { S.ui.palette = e.target.value; buildLut(); savePrefs(); };

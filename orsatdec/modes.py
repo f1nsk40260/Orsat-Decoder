@@ -335,12 +335,31 @@ PRESETS = [
 ]
 
 
+def directory():
+    """Tous les signaux identifiables (base Artemis) : fréquences connues, et mode d'Orsat-Decoder s'il
+    sait les décoder. Deux valeurs très éloignées sont une plage (3 à 30 MHz…), pas deux canaux."""
+    from .signal_id import DECODABLE, load_db
+    out = []
+    for r in load_db():
+        fr = r.get("freqs") or []
+        rng = None
+        if len(fr) == 2 and fr[0] > 0 and fr[1] / fr[0] > 1.5:
+            rng, fr = fr, []
+        elif len(fr) > 2 and fr[0] > 0 and fr[-1] / fr[0] > 3 and fr[0] % 1e6 == 0 and fr[-1] % 1e6 == 0:
+            rng, fr = [fr[0], fr[-1]], fr[1:-1]            # bornes rondes (3 et 30 MHz…) autour de vrais canaux
+        dec = DECODABLE.get(r["id"])
+        mode = dec[0][0] if dec and dec[0][0] in BY_ID else None
+        out.append({"id": r["id"], "title": r["title"], "mode": mode, "freqs": fr, "range": rng})
+    out.sort(key=lambda e: e["title"].lower())
+    return out
+
+
 def public_catalog():
     """Ce que l'interface a besoin de savoir (sans les fabriques Python)."""
     out = []
     for m in MODES:
         out.append({k: v for k, v in m.items() if k != "make"})
-    return {"modes": out, "presets": PRESETS}
+    return {"modes": out, "presets": PRESETS, "directory": directory()}
 
 
 def default_params(mode):

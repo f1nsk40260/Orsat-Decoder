@@ -50,6 +50,7 @@ def record(sig_dir):
     return {
         "id": int(s["pageid"]), "title": s["title"], "cat": s["category"],
         "fmin": min(fr) if fr else None, "fmax": max(fr) if fr else None,
+        "freqs": sorted({float(f) for f in fr}),
         "bw": max(bw) if bw else None,
         "mod": [m["value"] for m in s["modulation"]], "mode": [m["value"] for m in s["mode"]],
         "acf": [a for a in nums(s["acf"]) if a > 0],
