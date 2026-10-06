@@ -31,6 +31,7 @@ from .decoders.dgps import DGPS
 from .decoders.pactor import PactorI
 from .decoders.acars import ACARS
 from .decoders.hfdl import HFDL
+from .decoders.js8 import JS8
 from .decoders.ident import Identifier, SPAN as IDENT_SPAN
 
 DIR = {"key": "reverse", "label": "Sens", "opts": [[False, "Normal"], [True, "Inversé"]], "def": False}
@@ -83,6 +84,14 @@ MODES = [
      "af": 0, "whole": True, "kind": "msg", "make": lambda fs, af, p: FT8(fs, 1500, ft4=True)},
     {"id": "wspr", "label": "WSPR", "family": "Signaux faibles", "desc": "Balises de propagation, créneaux de 2 min (minutes paires).",
      "af": 0, "whole": True, "kind": "msg", "make": lambda fs, af, p: WSPR(fs)},
+    {"id": "js8", "label": "JS8 normal", "family": "Signaux faibles", "desc": "JS8Call : créneaux de 15 s, toute la bande audio (balises, CQ, messages dirigés, texte libre).",
+     "af": 0, "whole": True, "kind": "msg", "crc": True, "make": lambda fs, af, p: JS8(fs, "A")},
+    {"id": "js8b", "label": "JS8 rapide", "family": "Signaux faibles", "desc": "JS8Call rapide : créneaux de 10 s.",
+     "af": 0, "whole": True, "kind": "msg", "crc": True, "make": lambda fs, af, p: JS8(fs, "B")},
+    {"id": "js8c", "label": "JS8 turbo", "family": "Signaux faibles", "desc": "JS8Call turbo : créneaux de 6 s.",
+     "af": 0, "whole": True, "kind": "msg", "crc": True, "make": lambda fs, af, p: JS8(fs, "C")},
+    {"id": "js8e", "label": "JS8 lent", "family": "Signaux faibles", "desc": "JS8Call lent : créneaux de 30 s.",
+     "af": 0, "whole": True, "kind": "msg", "crc": True, "make": lambda fs, af, p: JS8(fs, "E")},
 ]
 
 
@@ -253,6 +262,12 @@ PRESETS = [
     {"label": "Météo DWD 7646 kHz", "mode": "rtty", "freq": 7646000, "params": {"baud": 50.0, "shift": 450.0, "reverse": True}},
     {"label": "Météo DWD 10100,8 kHz", "mode": "rtty", "freq": 10100800, "params": {"baud": 50.0, "shift": 450.0, "reverse": True}},
     {"label": "FT8 160 m", "mode": "ft8", "freq": 1840000},
+    {"label": "JS8 80 m", "mode": "js8", "freq": 3578000},
+    {"label": "JS8 40 m", "mode": "js8", "freq": 7078000},
+    {"label": "JS8 30 m", "mode": "js8", "freq": 10130000},
+    {"label": "JS8 20 m", "mode": "js8", "freq": 14078000},
+    {"label": "JS8 15 m", "mode": "js8", "freq": 21078000},
+    {"label": "JS8 10 m", "mode": "js8", "freq": 28078000},
     {"label": "FT8 80 m", "mode": "ft8", "freq": 3573000},
     {"label": "FT8 40 m", "mode": "ft8", "freq": 7074000},
     {"label": "FT8 30 m", "mode": "ft8", "freq": 10136000},

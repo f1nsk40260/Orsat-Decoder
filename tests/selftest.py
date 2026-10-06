@@ -71,6 +71,17 @@ def check_wspr():
     return ok
 
 
+def check_js8():
+    """JS8 normal : deux trames (texte libre compressé JSC et balise) à -12 dB dans un créneau de 15 s."""
+    from orsatdec.decoders import js8 as J
+    m1 = J.data_frame("HELLO WORLD 73")
+    x = add_noise(J.js8_audio([(1000.0, m1, J.DATA | J.FIRST | J.LAST), (1700.0, "ABCDEFGHIJKL", 1)]), -12, FS, seed=5)
+    got = [J.frame_text(d["bits72"], d["i3"])[0] for d in J.decode_window(x, FS, "A")]
+    ok = "HELLO WORLD 73" in got and len(got) == 2
+    print(f"  {'OK ' if ok else 'ÉCHEC'}  JS8         -12 dB   {len(got)} trame(s) : {', '.join(g.strip() for g in got)}")
+    return ok
+
+
 def check_flac():
     """Chaîne FLAC des serveurs PhantomSDR-Plus : encodage en blocs de 256, décodage en continu."""
     try:
@@ -114,6 +125,7 @@ def main():
         check("Navtex", sitorb_encode(nav, fs=FS, af=1000), SitorB(FS, 1000), nav, 0),
         check_ft8(),
         check_wspr(),
+        check_js8(),
         check_flac(),
     ]
     # jalon 2 : chaque banc de test fournit ses cas rapides
