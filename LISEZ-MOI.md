@@ -95,7 +95,9 @@ Les modes MFSK, Olivia et MT63 suivent l'émetteur de fldigi bit pour bit (véri
 
 ## Identification automatique
 
-`orsat-decoder --identify` mesure le signal (largeur, tonalités, vitesse, PSK, ACF), le compare aux
+Dans l'interface, choisissez **Identifier** puis cliquez sur un signal inconnu : après une dizaine de
+secondes d'écoute, Orsat-Decoder affiche ce que c'est et ouvre lui-même le canal du bon mode quand il
+sait le décoder. Pour un enregistrement, `orsat-decoder --identify` mesure le signal (largeur, tonalités, vitesse, PSK, ACF), le compare aux
 257 signaux de bande audio de la base [Artemis](https://github.com/AresValley/Artemis) (sigidwiki),
 puis fait tourner les décodeurs des meilleurs candidats : un texte lisible confirme le mode.
 Détails, taux de réussite et nouveaux décodeurs suggérés par la base : [docs/ARTEMIS.md](docs/ARTEMIS.md).

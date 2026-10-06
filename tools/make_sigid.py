@@ -76,18 +76,20 @@ def fingerprint(sig_dir, part=None):
     return {k: (round(m[k], 3) if isinstance(m[k], float) else m[k]) for k in FEATS}
 
 
-def synth_fps(pageid, snr=15.0, af=1500.0):
-    """Empreintes des sous-modes générés (orsatdec/gen/sigid_synth.py) pour un signal décodable."""
+def synth_fps(pageid, snrs=(15.0, 5.0, 0.0), af=1500.0):
+    """Empreintes des sous-modes générés (orsatdec/gen/sigid_synth.py) pour un signal décodable, à
+    plusieurs rapports S/B : certaines mesures (nombre de tonalités surtout) changent avec le bruit."""
     from orsatdec.gen.sigid_synth import SYNTH, TEXT
     from orsatdec.gen.encoders import add_noise
     out = []
     for label, mode_id, params, make in SYNTH.get(pageid, []):
         x = make(TEXT, FS, af)
         x = np.concatenate([np.zeros(FS // 2), x, np.zeros(FS // 2)])
-        m = measure(add_noise(x, snr, FS, seed=7), FS)
-        if m:
-            fp = {k: (round(m[k], 3) if isinstance(m[k], float) else m[k]) for k in FEATS}
-            out.append({"label": label, "mode": mode_id, "params": params, **fp})
+        for snr in snrs:
+            m = measure(add_noise(x, snr, FS, seed=7), FS)
+            if m:
+                fp = {k: (round(m[k], 3) if isinstance(m[k], float) else m[k]) for k in FEATS}
+                out.append({"label": label, "mode": mode_id, "params": params, "snr": snr, **fp})
     return out
 
 
@@ -120,8 +122,8 @@ def main():
         "source": "Artemis-DB (https://github.com/AresValley/Artemis-DB), données sigidwiki.com, GPL-3",
         "signals": recs}, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     n = sum(1 for r in recs if r.get("fp"))
-    ns = sum(len(r.get("fps", [])) for r in recs)
-    print(f"{len(recs)} signaux de bande audio, dont {n} avec empreinte, + {ns} sous-modes générés -> {out} ({out.stat().st_size // 1024} Ko)")
+    ns = len({(r["id"], f["label"]) for r in recs for f in r.get("fps", [])})
+    print(f"{len(recs)} signaux de bande audio, dont {n} avec empreinte, + {ns} sous-modes générés (3 niveaux de bruit) -> {out} ({out.stat().st_size // 1024} Ko)")
     return 0
 
 

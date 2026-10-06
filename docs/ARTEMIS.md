@@ -26,6 +26,16 @@ de son mode (de vraies réceptions, avec fading, filtres BLU et parasites).
 
 ## 2. Identification automatique (`orsatdec/signal_id.py`)
 
+**Dans l'interface** : choisir **Identifier** (en tête de la colonne des modes), puis cliquer sur un
+signal du waterfall. Le canal écoute 10 s (réglable), affiche les mesures et les candidats en une
+seconde environ, puis fait tourner les décodeurs des candidats décodables. Si l'un d'eux sort un texte
+lisible, le bon canal s'ouvre tout seul à la bonne fréquence (réglage « Mode trouvé : Ouvrir ») ou
+reste proposé avec un bouton (« Proposer »). Pour un mode lent (Olivia 8/250, MFSK8…) reconnu mais
+pas encore lisible, l'écoute est prolongée automatiquement jusqu'à 30 s. Chaque candidat renvoie à sa
+fiche sigidwiki ; les candidats décodables ont un bouton « Ouvrir ». « Relancer » recommence l'écoute.
+
+**En ligne de commande** :
+
 ```
 orsat-decoder --identify enregistrement.wav [FREQ_kHz]
 ```
@@ -37,7 +47,8 @@ orsat-decoder --identify enregistrement.wav [FREQ_kHz]
 2. **Comparaison** à la base `orsatdec/data/sigid.json` (257 signaux qui tiennent dans l'audio BLU) :
    paramètres déclarés, ACF, plage de fréquences, et surtout **l'empreinte** mesurée sur l'enregistrement
    de référence de chaque signal. Pour les modes décodables s'ajoutent 40 empreintes de sous-modes
-   générés (PSK63, RTTY 50/450, Olivia 32/1000…), car sigidwiki n'a qu'un enregistrement par famille.
+   générés (PSK63, RTTY 50/450, Olivia 32/1000…), mesurées à trois niveaux de bruit, car sigidwiki
+   n'a qu'un enregistrement par famille.
 3. **Confirmation** : les décodeurs des meilleurs candidats décodables tournent sur l'audio ; un texte
    lisible fait passer le mode en tête.
 
@@ -45,14 +56,20 @@ Taux mesurés :
 
 | Test | 1er | 3 premiers | 10 premiers |
 |---|---|---|---|
-| 236 enregistrements sigidwiki, paramètres déclarés seuls | 2 % | 4 % | 12 % |
-| idem avec les empreintes (1re moitié = référence, 2e = question) | 58 % | 63 % | 80 % |
-| idem en donnant la fréquence d'écoute | 64 % | 69 % | 86 % |
+| 244 enregistrements sigidwiki, paramètres déclarés seuls | 5 % | 8 % | 15 % |
+| idem avec les empreintes (1re moitié = référence, 2e = question) | 58 % | 73 % | 81 % |
+| idem en donnant la fréquence d'écoute | 66 % | 77 % | 85 % |
 
 La ligne « empreintes » est optimiste (référence et question viennent de la même émission).
 Test indépendant (`tests/test_sigid.py`) : 40 sous-modes générés, autre texte, autre fréquence audio,
-à +6 et 0 dB dans 2500 Hz : **69 sur 80 identifiés et décodés** après confirmation. Les échecs restants
-sont à 0 dB : RTTY, Navtex, MFSK32/64, Olivia 64/2000, MT63-2000, Feld Hell.
+à +6 et 0 dB dans 2500 Hz : **70 sur 80 identifiés et confirmés par décodage**. Les échecs : Olivia
+64/2000, Contestia 32/1000 et MT63 à 0 dB (signal large à peine au-dessus du bruit), MFSK64, et deux
+cas MFSK/DominoEX lents. La confirmation n'accepte qu'un texte contenant des mots du trafic radio ou des
+indicatifs : sur du bruit, aucun des 292 réglages de décodeur essayés n'atteint le seuil.
+
+Essai de bout en bout (`tests/e2e_ident.py`, navigateur sans écran, faux récepteur TCI) : RTTY météo
+DWD 50 bd / 450 Hz inversé, Olivia 8/250 et MFSK16, cliqués dans le waterfall sans dire ce qu'ils
+sont, s'ouvrent chacun dans le bon mode et décodent (12 s, 80 s avec écoute prolongée, 12 s).
 
 Ce que l'identification ne sait pas faire : séparer deux modes de même modulation sans les décoder
 (Olivia et Contestia ; DominoEX et THOR), ni reconnaître sûrement un mode dont la base n'a qu'un extrait
@@ -91,6 +108,7 @@ python3 tools/make_sigid.py ~/Artemis-DB          # régénère orsatdec/data/si
 python3 tests/artemis_bench.py ~/Artemis-DB       # décodeurs sur signaux réels
 python3 tests/sigid_eval.py ~/Artemis-DB          # taux d'identification
 python3 tests/test_sigid.py                        # identification sur mires générées
+python3 tests/e2e_ident.py                         # bout en bout dans l'interface (playwright)
 ```
 
 Licence : Artemis et Artemis-DB sont sous GPL-3 ; les fiches viennent de sigidwiki.com. `sigid.json`

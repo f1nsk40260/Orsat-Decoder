@@ -13,6 +13,7 @@ Trois étages :
 La base est générée par tools/make_sigid.py à partir d'Artemis-DB (GPL-3, données sigidwiki).
 """
 import json
+import re
 from pathlib import Path
 
 import numpy as np
@@ -50,6 +51,7 @@ MOD_CLASS = {   # modulation déclarée dans la base -> grande famille
     "AM": "analog", "FM": "analog", "USB": "analog", "LSB": "analog", "VSB": "analog", "SSB": "analog",
 }
 
+MEASURE_MAX = 15.0       # secondes d'audio au plus pour les mesures
 FEATS = ("bw", "ntones", "spacing", "baud", "envvar", "psk", "acf", "gaps")
 
 
@@ -69,19 +71,17 @@ def _smooth(v, w):
     return np.convolve(v, np.ones(w) / w, mode="same") if w > 1 else v
 
 
-def _occupied(f, p, lo, hi):
-    """Zone occupée par le signal principal. Le bruit est le niveau médian de la bande audio ; on part du
-    pic le plus fort, on prend les segments au-dessus du bruit (+6 dB) qui en sont proches et d'un
-    niveau comparable (les deux tonalités d'un FSK large), puis on garde 99 % de la puissance utile."""
+def _occupied(f, p, lo, hi, near=None):
+    """Zone occupée par le signal principal. Le bruit est le 20e centile du spectre de la bande audio (la
+    médiane monte quand plusieurs signaux occupent la bande) ; on part du segment au-dessus du bruit
+    (+6 dB) le plus fort, ou de celui qui est sous le clic, on y joint l'autre tonalité d'un FSK large,
+    puis on garde 99 % de la puissance utile."""
     k = (f >= lo) & (f <= hi)
     fk, pk = f[k], p[k]
     df = fk[1] - fk[0]
     sm = _smooth(pk, round(12 / df))
     db = 10 * np.log10(sm + 1e-20)
-    floor_db = np.median(db)
-    if np.mean(db > floor_db + 6) < 0.05 and db.max() - floor_db < 10:
-        # signal très large (Olivia 64/2000, MT63-2000) : la médiane tombe dans le signal
-        floor_db = np.percentile(db, 10)
+    floor_db = np.percentile(db, 20)
     peak = db.max()
     if peak - floor_db < 6:
         return None
@@ -93,22 +93,47 @@ def _occupied(f, p, lo, hi):
             j = i
             while j + 1 < len(above) and above[j + 1]:
                 j += 1
-            segs.append([i, j, db[i:j + 1].max()])
+            segs.append([i, j, db[i:j + 1].max(), db[i:j + 1].max() - np.median(db[i:j + 1])])
             i = j + 1
         else:
             i += 1
+    joined = [segs[0]]                 # creux étroits à l'intérieur d'un signal large : on recolle
+    for sg in segs[1:]:
+        if (sg[0] - joined[-1][1]) * df < 25:
+            a0 = joined[-1][0]
+            seg = db[a0:sg[1] + 1]
+            joined[-1] = [a0, sg[1], seg.max(), seg.max() - np.median(seg)]
+        else:
+            joined.append(sg)
+    segs = joined
     best = max(segs, key=lambda s: s[2])
-    a, b, top = best
+    if near is not None:              # clic sur un signal : celui qui est sous le clic (±150 Hz) l'emporte
+        for reach in (150, 500):      # 500 Hz : clic au milieu des deux tonalités d'un FSK large
+            close = [s for s in segs if fk[s[0]] - reach <= near <= fk[s[1]] + reach
+                     and (s[1] - s[0] + 1) * df >= 15 and s[2] - floor_db >= 9]
+            if close:
+                best = max(close, key=lambda s: s[2])
+                break
+    a, b, top, peaky = best
+
+    def alike(s):
+        # l'autre tonalité d'un FSK : même niveau, et comme elle une raie qui domine son segment
+        # (un Olivia ou un MFSK voisin a un spectre plat : il n'est pas joint)
+        w, w0 = (s[1] - s[0] + 1) * df, (best[1] - best[0] + 1) * df
+        if w < 15 or abs(s[2] - top) >= 6:
+            return False
+        narrow = max(w, w0) < 130 and max(w, w0) / min(w, w0) < 1.6      # deux raies étroites jumelles
+        return (s[3] >= 8 and peaky >= 8) or narrow
     changed = True
     while changed:
         changed = False
         for s in segs:
-            if s[1] < a and (a - s[1]) * df < 1000 and s[2] > top - 12 and (b - s[0]) * df < 3600:
+            if s[1] < a and (a - s[1]) * df < 1000 and alike(s) and (b - s[0]) * df < 3600:
                 a, changed = s[0], True
-            elif s[0] > b and (s[0] - b) * df < 1000 and s[2] > top - 12 and (s[1] - a) * df < 3600:
+            elif s[0] > b and (s[0] - b) * df < 1000 and alike(s) and (s[1] - a) * df < 3600:
                 b, changed = s[1], True
     # 99 % de la puissance au-dessus du bruit, dans la zone retenue élargie de 20 %
-    m = max(2, int((b - a) * 0.2))
+    m = max(2, min(int((b - a) * 0.2), int(round(40 / df))))     # flancs, sans déborder sur un voisin
     a2, b2 = max(0, a - m), min(len(pk) - 1, b + m)
     u = np.clip(pk[a2:b2 + 1] - floor, 0, None)
     c = np.cumsum(u)
@@ -277,14 +302,15 @@ def _fundamental(sig, fs, best):
             res = (float(f[ii]), float(sal))
     return res
 
-def measure(x, fs, lo=100.0, hi=3600.0):
+def measure(x, fs, lo=100.0, hi=3600.0, near=None):
     """Mesures sur l'audio (réel, quelques secondes). Renvoie un dict, ou None s'il n'y a pas de signal."""
     x = np.asarray(x, np.float64)
     if len(x) < fs * 2:
         return None
+    x = x[: int(fs * MEASURE_MAX)]          # mesures toujours sur la même durée (empreintes comparables)
     x = x / (np.std(x) + 1e-12)
     f, p = _spectrum(x, fs, 16384)
-    occ = _occupied(f, p, lo, hi)
+    occ = _occupied(f, p, lo, hi, near)
     if occ is None:
         return None
     f1, f2, floor, snr = occ
@@ -375,7 +401,7 @@ def _baud_ratio(a, b):
     for h in range(1, 13):
         rh = abs(abs(np.log2(a / b)) - np.log2(h))
         if h > 1 and rh < 0.05:
-            return min(r, 0.25)
+            return min(r, 0.1)            # la mesure a pu tomber sur une harmonique : écart modéré
     return r
 
 
@@ -428,8 +454,8 @@ def identify(m, freq=None, top=8, db=None):
             sc += 3.0 * (1 - min(dfp, 2.5))
             if dfp < 0.5:
                 why.append("empreinte")
-        if not refs and not s.get("bw") and not s.get("mod"):
-            sc -= 1.0                                # rien à comparer : ne doit pas passer devant
+        if not refs:
+            sc -= 1.5                                # sans enregistrement de référence : jamais devant une empreinte proche
         wmeta = 0.35 if refs else 1.0                 # les paramètres déclarés sont souvent larges ou approximatifs
         if s.get("bw"):
             r = abs(np.log2(max(m["bw"], 5) / s["bw"]))
@@ -464,59 +490,107 @@ def identify(m, freq=None, top=8, db=None):
 
 # ------------------------------------------------------------------------------------ confirmation
 
+# Mots qu'on rencontre dans le trafic radio (amateur, maritime, météo) et dans les textes d'essai
+_KNOWN = set("""
+CQ DE VVV K KN SK AR BK TU TNX TKS 73 88 QSL QSO QTH QRZ QRM QRN QSB QSY QRT QRV QRP QRO QTC RST UR ES OM YL XYL
+GM GA GE GN HI HW CPY FB NAME OP RIG ANT WX PSE AGN TEST CONTEST NR DX BAND MHZ KHZ WPM BEST REGARDS
+ZCZC NNNN RYRY RYRYRY RY SG TTTT MSG MESSAGE WARNING NAVTEX NAVAREA SECURITE GALE STORM FORECAST WIND WAVE
+SEA LOW HIGH PRESSURE SYNOP METAR TAF NORTH SOUTH EAST WEST AREA POSITION
+THE AND OF TO IS IN FOR ON WITH AT FROM BY THIS THAT ARE BE IT AS ALL HERE THERE YOU YOUR MY ME WE
+QUICK BROWN FOX JUMPS JUMPED OVER LAZY DOG DOGS BACK 0123456789 1234567890 ABCDEFGHIJKLMNOPQRSTUVWXYZ
+LE LA LES DE DU DES ET EN UN UNE EST POUR SUR AVEC BONJOUR MERCI SALUT
+""".split())
+_CALL = re.compile(r"^(?:[A-Z]{1,2}|[0-9][A-Z]|[A-Z][0-9])[0-9][A-Z]{1,4}(?:/[A-Z0-9]{1,4})?$")
+
+
 def plausible(text):
-    """Lisibilité d'un texte décodé (0 = charabia) : caractères ASCII usuels, espaces à une fréquence
-    normale, mots de longueur raisonnable contenant des voyelles."""
+    """Lisibilité d'un texte décodé (0 = charabia). Des lettres au hasard (un décodeur RTTY sur du
+    bruit en sort facilement) ne suffisent pas : il faut des mots connus du trafic radio, des
+    indicatifs, ou des mots qui se répètent comme dans toute vraie émission."""
     t = text.strip()
     if len(t) < 8:
         return 0.0
     ok = sum(c.isascii() and (c.isalnum() or c in " .,:;-/?'()=+\n\r") for c in t) / len(t)
-    words = t.split()
-    sp = (len(words) - 1) / len(t)
-    good = [w for w in words if 2 <= len(w) <= 12 and w.isascii() and any(v in w.upper() for v in "AEIOUY0123456789")]
-    if ok < 0.93 or not 0.05 <= sp <= 0.4:
+    if ok < 0.95:
         return 0.0
-    return len(t) * ok ** 4 * len(good) / max(1, len(words))
+    toks = re.findall(r"[A-Z0-9/]+", t.upper())
+    if not toks:
+        return 0.0
+    known = sum(w in _KNOWN for w in toks)
+    calls = sum(bool(_CALL.match(w)) and any(ch.isdigit() for ch in w) for w in toks)
+    # mots répétés (CQ CQ, indicatif répété…) : seulement s'ils ont l'air de mots, et seulement en
+    # renfort d'un mot connu ou d'un indicatif (un décodeur sur du bruit répète aussi ses « RRR »)
+    long = [w for w in toks if len(w) >= 3 and len(set(w)) >= 2 and any(v in w for v in "AEIOUY")]
+    rep = len(long) - len(set(long)) if known + calls else 0
+    sc = 3 * known + 3 * calls + 2 * rep
+    return float(sc * ok ** 2)
 
 
-def confirm(x, fs, m, candidates, modes, tail=12.0):
-    """Fait décoder x par les candidats décodables ; renvoie (mode, params, texte, note) du meilleur,
-    ou None. modes : dict id -> entrée de orsatdec.modes (fabrique « make »)."""
+def _variant_tries(c, modes):
+    """Essais de décodage pour un candidat : sous-mode reconnu (et son sens inversé) d'abord,
+    puis, s'il ne donne rien, toutes les variantes connues du mode."""
+    v = c.get("variant")
+    first = []
+    if v:
+        first.append((v["mode"], dict(v["params"])))
+        mode = modes.get(v["mode"]) or {}
+        if any(p["key"] == "reverse" for p in mode.get("params", [])):
+            first.append((v["mode"], {**v["params"], "reverse": True}))
+    rest = [t for t in DECODABLE.get(c["id"], []) if t not in first]
+    return first, rest
+
+
+def _decode_text(x, fs, af, mode, params):
     from .modes import default_params
+    dec = mode["make"](fs, af, dict(default_params(mode), **params))
+    txt = []
+    for i in range(0, len(x), 480):
+        for ev in dec.process(x[i:i + 480]):
+            if ev.get("t") == "text":
+                txt.append(ev["text"])
+    return "".join(txt)
+
+
+def confirm(x, fs, m, candidates, modes, tail=12.0, stop=None):
+    """Fait décoder x par les candidats décodables ; renvoie (mode, params, texte, note) du meilleur,
+    ou None. modes : dict id -> entrée de orsatdec.modes (fabrique « make »). stop() : interruption."""
     xs = np.concatenate([x, np.random.default_rng(0).normal(0, 1e-3 * np.std(x), int(fs * tail))])
     best = None
-    for c in candidates:
-        v = c.get("variant")
-        tries = [(v["mode"], v["params"])] if v else list(DECODABLE.get(c["id"], []))
-        for mode_id, params in tries:
-            mode = modes.get(mode_id)
-            if mode is None or mode.get("kind") in ("img",) or mode.get("whole"):
-                continue
-            p = dict(default_params(mode), **params)
-            dec = mode["make"](fs, m["fc"], p)
-            txt = []
-            for i in range(0, len(xs), 480):
-                for ev in dec.process(xs[i:i + 480]):
-                    if ev.get("t") == "text":
-                        txt.append(ev["text"])
-            t = "".join(txt)
-            sc = plausible(t)
-            if best is None or sc > best[3]:
-                best = (mode_id, params, t, sc)
-    return best if best and best[3] >= 20 else None
+    for stage in (0, 1):
+        # 1er passage : le sous-mode reconnu de chaque candidat ; 2e : toutes les variantes du premier seulement
+        for c in (candidates if stage == 0 else candidates[:1]):
+            for mode_id, params in _variant_tries(c, modes)[stage]:
+                if stop and stop():
+                    return None
+                mode = modes.get(mode_id)
+                if mode is None or mode.get("kind") in ("img", "ident") or mode.get("whole"):
+                    continue
+                t = _decode_text(xs, fs, m["fc"], mode, params)
+                sc = plausible(t)
+                if best is None or sc > best[3]:
+                    best = (mode_id, params, t, sc)
+        if best and best[3] >= 9:
+            return best
+    return None
 
 
-def analyse(x, fs, freq=None, modes=None, top=5, try_decoders=3):
+def analyse(x, fs, freq=None, modes=None, top=5, try_decoders=3, lo=100.0, hi=3600.0, on_measure=None, stop=None, near=None, also=()):
     """Chaîne complète : mesures, candidats, puis confirmation par décodage des candidats décodables.
-    Un candidat confirmé passe en tête. Renvoie {"measure", "candidates", "confirmed"} ou None."""
-    m = measure(x, fs)
+    Un candidat confirmé passe en tête. Renvoie {"measure", "candidates", "confirmed"} ou None.
+    on_measure(résultat sans confirmation) est appelé dès que les candidats sont connus.
+    also : candidats d'une analyse précédente du même signal, essayés en premier."""
+    m = measure(x, fs, lo, hi, near)
     if m is None:
         return None
     cand = identify(m, freq=freq, top=top)
+    if on_measure:
+        on_measure({"measure": m, "candidates": list(cand), "confirmed": None})
     conf = None
     if modes is not None:
-        dec = [c for c in cand if c["decodable"]][:try_decoders]
-        r = confirm(x, fs, m, dec, modes) if dec else None
+        dec = [c for c in also if c.get("decodable")]
+        dec += [c for c in cand if c["decodable"] and c["id"] not in {d["id"] for d in dec}]
+        dec = dec[:max(try_decoders, len([c for c in also if c.get("decodable")]))]
+        r = confirm(x, fs, m, dec, modes, stop=stop) if dec else None
         if r:
             mode_id, params, text, sc = r
             owner = next((c for c in dec if (c.get("variant") or {}).get("mode") == mode_id
@@ -524,8 +598,14 @@ def analyse(x, fs, freq=None, modes=None, top=5, try_decoders=3):
             conf = {"id": owner["id"] if owner else None, "mode": mode_id, "params": params,
                     "text": text, "score": round(float(sc), 1), "af": m["fc"]}
             if owner:
-                cand.remove(owner)
+                if owner in cand:
+                    cand.remove(owner)
                 cand.insert(0, owner)
+                # le sous-mode affiché est celui qui a décodé
+                from .gen.sigid_synth import SYNTH
+                lab = next((lb for lb, md, pr, _ in SYNTH.get(owner["id"], [])
+                            if md == mode_id and all(params.get(k) == v for k, v in pr.items())), None)
+                owner["variant"] = {"label": lab or modes[mode_id]["label"], "mode": mode_id, "params": params}
     return {"measure": m, "candidates": cand, "confirmed": conf}
 
 

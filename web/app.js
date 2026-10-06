@@ -58,6 +58,7 @@ const H = {
   msg(m) { const c = S.chans.get(m.ch); if (c) writeMsg(c, m); },
   img(m) { const c = S.chans.get(m.ch); if (c) onImage(c, m); },
   cstat(m) { const c = S.chans.get(m.ch); if (c) updateStat(c, m); },
+  ident(m) { const c = S.chans.get(m.ch); if (c) renderIdent(c, m); },
   notice(m) { toast(m.text, m.level === 'error' ? 'error' : ''); },
   audio_inputs(m) { S.inputs = m.inputs || []; renderSources(); },
 };
@@ -229,11 +230,16 @@ function buildCard(c) {
   pause.onclick = () => send({ t: 'pause', ch: c.id, paused: !c.paused });
   const clear = el('button', { class: 'icon-btn small', type: 'button', title: 'Effacer le texte', text: 'Effacer' });
   clear.onclick = () => { c.out.replaceChildren(); c.cur = null; c.table = null; c.pic = null; };
-  const isImg = m.kind === 'img';
+  const isImg = m.kind === 'img', isIdent = m.kind === 'ident';
   if (isImg) clear.title = 'Effacer les images';
+  if (isIdent) {                                   // « Relancer » : nouvelle écoute au même endroit
+    clear.textContent = 'Relancer'; clear.title = 'Écouter et identifier de nouveau';
+    clear.onclick = () => { c.out.replaceChildren(); send({ t: 'retune', ch: c.id, params: {} }); };
+  }
   const save = el('button', { class: 'icon-btn small', type: 'button', text: 'Enregistrer',
     title: isImg ? 'Télécharger la dernière image (PNG)' : 'Enregistrer le texte' });
   save.onclick = () => isImg ? saveImage(c) : saveText(c);
+  if (isIdent) save.hidden = true;
   const close = el('button', { class: 'icon-btn small', type: 'button', title: 'Fermer le canal', text: '✕' });
   close.onclick = () => send({ t: 'remove', ch: c.id });
   const meters = el('div', { class: 'meters' });
@@ -245,7 +251,7 @@ function buildCard(c) {
     params.append(el('label', {}, p.label, sel));
     (c.paramSel ||= {})[p.key] = [sel, p];
   }
-  const out = el('div', { class: isImg ? 'out img' : 'out', tabindex: '0' });
+  const out = el('div', { class: isImg ? 'out img' : isIdent ? 'out ident' : 'out', tabindex: '0' });
   const spec = el('canvas', { class: 'spec', title: 'Spectre du canal : cliquez sur le signal, ou molette pour accorder (Maj : 1 Hz, Alt : 100 Hz)' });
   const specWrap = el('div', { class: 'spec-wrap' }, spec, el('div', { class: 'spec-read' }));
   const card = el('article', { class: 'chan', style: `--c:${c.color}` },
@@ -393,6 +399,8 @@ function updateStat(c, s) {
   if (s.sync != null) parts.push(s.sync ? 'synchro <b>oui</b>' : 'synchro non');
   if (s.last != null) parts.push(`<b>${s.last}</b> décodés`);
   if (s.ready === false) parts.push('<b>décodeur absent</b>');
+  if (s.ident === 'écoute') parts.push(`écoute <b>${Math.round((s.progress || 0) * 100)} %</b>`);
+  else if (s.ident === 'analyse') parts.push('<b>analyse…</b>');
   c.meters.innerHTML = parts.join(' &nbsp; ');
 }
 const CALL_RE = /\b((?:[A-Z]{1,2}|[0-9][A-Z]|[A-Z][0-9])[0-9][A-Z]{1,4}(?:\/[A-Z0-9]{1,4})?)\b/g;
@@ -428,6 +436,68 @@ function writeMsg(c, m) {
   c.table.append(tr);
   while (c.table.rows.length > 1500) c.table.deleteRow(0);
   if (atBottom) out.scrollTop = out.scrollHeight;
+}
+// ------------------------------------------------------------------ identification
+const WHY = { empreinte: 'empreinte', largeur: 'largeur', modulation: 'modulation', 'fréquence': 'fréquence', ACF: 'ACF' };
+function fmtMeasure(m) {
+  const n = v => v.toLocaleString('fr-FR', { maximumFractionDigits: v < 20 ? 2 : 0 });
+  const p = [`${n(m.f1)}–${n(m.f2)} Hz audio`, `largeur <b>${n(m.bw)} Hz</b>`];
+  if (m.ntones >= 2 && m.spacing) p.push(`<b>${m.ntones}</b> tonalités à <b>${n(m.spacing)} Hz</b>`);
+  if (m.baud) p.push(`<b>${n(m.baud)}</b> bauds`);
+  if (m.psk) p.push(`PSK d'ordre <b>${m.psk}</b>`);
+  if (m.acf) p.push(`ACF <b>${n(m.acf)} ms</b>`);
+  if (m.envvar < 0.15) p.push('enveloppe constante');
+  if (m.gaps > 0.35) p.push('manipulation tout ou rien');
+  p.push(`<b>${Math.round(m.snr)} dB</b> au-dessus du bruit`);
+  return p.join(' · ');
+}
+function openFound(c, o) {
+  if (!o) return;
+  addChannel(o.mode, o.freq, o.params);
+  send({ t: 'remove', ch: c.id });
+}
+function renderIdent(c, m) {
+  const out = c.out; out.replaceChildren();
+  if (m.error) { out.append(el('p', { class: 'id-none', text: m.error })); return; }
+  if (m.measure) { const p = el('p', { class: 'id-meas' }); p.innerHTML = fmtMeasure(m.measure); out.append(p); }
+  const auto = c.params.auto !== false;
+  if (m.confirmed) {
+    const k = m.confirmed;
+    const box = el('div', { class: 'id-ok' },
+      el('div', { class: 'id-head' }, el('span', { class: 'id-badge', text: 'Confirmé par décodage' }),
+        el('b', { text: k.label }), el('span', { class: 'id-par', text: paramText(k.mode, k.params) })),
+      el('div', { class: 'id-text', text: k.text }));
+    if (!auto) box.append(el('button', { class: 'btn', type: 'button', text: `Ouvrir un canal ${k.label}`, onclick: () => openFound(c, m.open) }));
+    out.append(box);
+  } else if (m.phase === 'candidats') {
+    out.append(el('p', { class: 'id-wait', text: m.candidates.some(x => x.decodable) ? 'Vérification par décodage des candidats…' : '' }));
+  } else if (m.candidates.length) {
+    out.append(el('p', { class: 'id-none', text: m.candidates.some(x => x.decodable)
+      ? 'Aucun décodeur n\'a confirmé : voici les signaux les plus ressemblants.'
+      : 'Signal que Orsat-Decoder ne décode pas : voici les plus ressemblants de la base Artemis.' }));
+  }
+  if (!m.candidates.length) return;
+  const top = Math.max(...m.candidates.map(x => x.score)), low = Math.min(...m.candidates.map(x => x.score), top - 3);
+  const ol = el('ol', { class: 'id-list' });
+  for (const k of m.candidates) {
+    const pct = Math.max(4, Math.round((k.score - low) / (top - low || 1) * 100));
+    const li = el('li', {},
+      el('div', { class: 'id-row' },
+        el('a', { href: k.url, target: '_blank', rel: 'noopener', text: k.title, title: 'Fiche sigidwiki' }),
+        k.variant ? el('span', { class: 'id-var', text: k.variant.label }) : null,
+        el('span', { class: 'id-bar', title: `note ${k.score}` }, el('i', { style: `width:${pct}%` })),
+        k.open ? el('button', { class: 'icon-btn small', type: 'button', text: 'Ouvrir', title: 'Ouvrir un canal dans ce mode',
+          onclick: () => openFound(c, k.open) }) : null),
+      el('div', { class: 'id-why', text: k.why.length ? 'Concorde : ' + k.why.map(w => WHY[w] || w).join(', ') : 'ressemblance faible' }));
+    ol.append(li);
+  }
+  out.append(ol);
+}
+function paramText(mode, params) {
+  const md = S.byId[mode]; if (!md || !params) return '';
+  return (md.params || []).filter(p => p.key in params && p.key !== 'reverse')
+    .map(p => (p.opts.find(o => o[0] === params[p.key]) || [, params[p.key]])[1]).join(' · ')
+    + (params.reverse ? ' · inversé' : '');
 }
 // ------------------------------------------------------------------ images (fax, SSTV, Hell)
 const b64bytes = s => { const b = atob(s), u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u; };
@@ -621,6 +691,7 @@ function placeMarkers() {
     const m = S.byId[c.mode]; if (!m) continue;
     let a, b;
     if (m.whole) { a = c.freq + 200; b = c.freq + 3000; }
+    else if (m.kind === 'ident') { a = c.freq - 50; b = c.freq + 50; }   // repère étroit : le waterfall reste cliquable
     else { a = c.freq - c.bw / 2; b = c.freq + c.bw / 2; }
     const xa = xOfFreq(a), xb = xOfFreq(b);
     if (xb < 0 || xa > WF.c.getBoundingClientRect().width) continue;
@@ -695,7 +766,7 @@ function initWaterfall() {
     const m = S.byId[S.mode]; if (!m) return;
     let f = freqAtX(e.clientX);
     const hzPerPx = (S.view[1] - S.view[0]) / WF.c.getBoundingClientRect().width;
-    if (!m.whole && hzPerPx > 20) {
+    if (!m.whole && hzPerPx > (m.kind === 'ident' ? 150 : 20)) {
       // résolution trop faible pour viser un signal : on zoome autour du clic, le clic suivant ouvrira le canal
       const span = Math.max(2000, WF.c.getBoundingClientRect().width * 8);
       setView(f - span / 2, f + span / 2);
@@ -707,6 +778,8 @@ function initWaterfall() {
     } else if (m.whole) {
       const near = S.catalog.presets.filter(p => p.mode === m.id).map(p => p.freq).find(p => f >= p - 500 && f <= p + 3500);
       f = near ?? Math.round(f - 1500);
+    } else if (m.kind === 'ident') {
+      f = Math.round(snapFreq(f, 300, true));       // centre du signal sous le clic
     } else {
       const fsk = m.bw_from === 'shift' || m.id === 'navtex';
       f = Math.round(snapFreq(f, fsk ? 400 : (m.bw || 200), fsk));

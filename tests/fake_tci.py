@@ -44,6 +44,22 @@ elif os.environ.get("FAKE_TCI_SET") == "images":
     ]
 
 
+# Jeu « ident » (cadran 10 100 kHz) : signaux à identifier, sans dire lesquels
+if os.environ.get("FAKE_TCI_SET") == "ident":
+    from orsatdec.gen.mfsk import mfsk_encode
+    from orsatdec.gen.olivia import olivia_encode
+    STATIONS = [
+        (10_100_800, lambda: rtty_encode("RYRYRY ZCZC DDK9 WEATHER REPORT GALE WARNING NORTH SEA NNNN " * 3,
+                                        fs=FS, af=AF0, baud=50.0, shift=450.0, reverse=True)),
+        (10_101_700, lambda: olivia_encode("CQ CQ DE F1NSK F1NSK OLIVIA 8/250 TEST PSE K ", fs=FS, af=AF0, tones=8, bw=250)),
+        (10_102_400, lambda: np.concatenate([mfsk_encode("CQ CQ DE F1NSK MFSK16 TEST ORSAT DECODER K " * 2, fs=FS, af=AF0),
+                                             np.zeros(FS * 2)])),
+    ]
+    DIAL0 = 10_100_000
+else:
+    DIAL0 = 7_069_000
+
+
 class Air:
     def __init__(self):
         self.bb = []
@@ -70,7 +86,7 @@ class Air:
 async def handler(request):
     ws = web.WebSocketResponse()
     await ws.prepare(request)
-    st = {"dial": 7_069_000, "mode": "usb", "audio": False}
+    st = {"dial": DIAL0, "mode": "usb", "audio": False}
     air = Air()
     await ws.send_str("protocol:ExpertSDR3,2.0;device:FakeTCI;receive_only:true;trx_count:1;channels_count:2;")
     await ws.send_str(f"vfo:0,0,{st['dial']};modulation:0,{st['mode']};ready;")

@@ -17,10 +17,17 @@ from .decoders.mt63 import MT63
 from .decoders.wefax import WeFax
 from .decoders.sstv import SSTV
 from .decoders.hell import Hell
+from .decoders.ident import Identifier, SPAN as IDENT_SPAN
 
 DIR = {"key": "reverse", "label": "Sens", "opts": [[False, "Normal"], [True, "Inversé"]], "def": False}
 
 MODES = [
+    {"id": "ident", "label": "Identifier", "family": "Identification", "kind": "ident",
+     "desc": "Cliquez sur un signal inconnu : Orsat-Decoder le reconnaît (base Artemis) et ouvre le bon mode.",
+     "af": 1500, "bw": 2 * IDENT_SPAN,
+     "params": [{"key": "seconds", "label": "Écoute", "opts": [[6.0, "6 s"], [10.0, "10 s"], [20.0, "20 s"], [30.0, "30 s"]], "def": 10.0},
+                {"key": "auto", "label": "Mode trouvé", "opts": [[True, "Ouvrir"], [False, "Proposer"]], "def": True}],
+     "make": lambda fs, af, p: Identifier(fs, af, seconds=p.get("seconds", 10.0))},
     {"id": "psk31", "label": "PSK31", "family": "PSK", "desc": "Le mode clavier le plus utilisé.", "af": 1000,
      "make": lambda fs, af, p: PSK(fs, af, baud=31.25), "bw": 60},
     {"id": "psk63", "label": "PSK63", "family": "PSK", "desc": "", "af": 1000,

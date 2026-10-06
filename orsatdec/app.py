@@ -123,7 +123,9 @@ class Channel:
         self.app.loop.call_soon_threadsafe(self.app.chan_update, self)
 
     def reset_decoder(self):
-        self.decoder = None
+        dec, self.decoder = self.decoder, None
+        if dec is not None and hasattr(dec, "close"):
+            dec.close()
 
     def move_decoder(self, af):
         """Petit réaccord : le décodeur se déplace dans l'audio déjà reçu, sans être recréé."""
@@ -188,6 +190,8 @@ class Channel:
         if self.decoder is None or fs != self.fs:
             self.fs = fs
             self.decoder = self.mode["make"](fs, self.app.src.decoder_af(self), self.params)
+            if self.mode.get("kind") == "ident":
+                self.decoder.rf = self.app.src.chan_freq(self)     # fréquence radio, si la source la connaît
             if self.state in ("connexion", "reconnexion"):
                 self.set_state("écoute")
         try:
@@ -209,6 +213,9 @@ class Channel:
             return
         for ev in events:
             ev = {**ev, "ch": self.id}
+            if ev.get("t") == "ident":
+                self._ident(ev)
+                continue
             if ev.get("t") == "img" and self.images is not None:
                 self.app.broadcast(ev)
                 extra = self.images.handle(ev)
@@ -227,7 +234,36 @@ class Channel:
             st["dbfs"] = round(10 * np.log10(self.ms2 + 1e-12), 1)
             self.app.broadcast({"t": "cstat", "ch": self.id, **st})
 
+    def _ident(self, ev):
+        """Résultat d'identification : fréquence du signal trouvé, puis ouverture du mode si demandé."""
+        src = self.app.src
+        base = src.chan_freq(self) - src.decoder_af(self)          # fréquence de l'audio 0 Hz
+        opn = ev.get("open")
+        if opn:
+            mode = BY_ID[opn["mode"]]
+            opn["freq"] = base if mode.get("whole") else base + opn["af"]
+        fc = (ev.get("measure") or {}).get("fc")
+        for c in ev.get("candidates", []):             # candidats décodables : de quoi ouvrir leur mode
+            v = c.get("variant")
+            if v and fc is not None and v["mode"] in BY_ID:
+                c["open"] = {"mode": v["mode"], "params": v["params"],
+                             "freq": base if BY_ID[v["mode"]].get("whole") else base + fc}
+        self.history = [h for h in self.history if h.get("t") != "ident"] + [ev]
+        self.app.broadcast(ev)
+        if ev.get("phase") == "fin" and opn and self.params.get("auto", True):
+            c = ev["confirmed"]
+            log.info("identifié : %s à %.1f kHz", c["label"], opn["freq"] / 1000)
+            new = self.app._add_channel(opn["mode"], freq=opn["freq"], params=opn["params"])
+            note = {"t": "text", "text": f"[Identifié : {c['label']}]\n{c['text']}\n", "ch": new.id}
+            new.history.append(note)
+            self.app.broadcast(note)
+            self.app.broadcast({"t": "notice", "level": "",
+                                "text": f"Signal identifié : {c['label']}. Canal ouvert."})
+            asyncio.ensure_future(self.app.remove_channel(self.id))
+
     def stop(self):
+        if self.decoder is not None and hasattr(self.decoder, "close"):
+            self.decoder.close()
         self.exec.shutdown(wait=False, cancel_futures=True)
         if self.images is not None:
             self.images.handle({"op": "end"})         # image en cours : enregistrée telle quelle
@@ -339,12 +375,21 @@ class App:
             self._save_channels()
         return ch
 
+    async def remove_channel(self, cid):
+        ch = self.channels.pop(cid, None)
+        if ch:
+            await self.src.detach(ch)
+            ch.stop()
+            self.broadcast({"t": "chan_removed", "ch": ch.id})
+            self._save_channels()
+
     def _save_channels(self):
         conf = self.src_conf()
         rx = conf.get("rx")
         others = [c for c in self.conf.get("channels", []) if not (c.get("source") == conf["id"] and c.get("rx") == rx)]
         mine = [{"source": conf["id"], "rx": rx, "mode": ch.mode["id"], "freq": ch.freq, "af": ch.af,
-                 "params": ch.params, "paused": ch.paused} for ch in self.channels.values()]
+                 "params": ch.params, "paused": ch.paused} for ch in self.channels.values()
+                if ch.mode.get("kind") != "ident"]            # un canal d'identification ne se garde pas
         self.conf["channels"] = others + mine
         save_conf(self.conf)
 
@@ -370,12 +415,7 @@ class App:
         elif t == "preset":
             await self._preset(ws, m)
         elif t == "remove":
-            ch = self.channels.pop(m.get("ch"), None)
-            if ch:
-                await src.detach(ch)
-                ch.stop()
-                self.broadcast({"t": "chan_removed", "ch": ch.id})
-                self._save_channels()
+            await self.remove_channel(m.get("ch"))
         elif t == "retune":
             ch = self.channels.get(m.get("ch"))
             if ch:

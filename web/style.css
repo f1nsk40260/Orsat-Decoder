@@ -111,6 +111,28 @@ input[type=search]::placeholder { color: var(--muted); }
 .chan .pic figcaption { font: 12px var(--font); color: var(--muted); margin-bottom: 4px; }
 .chan .pic.tape canvas { width: auto; max-width: 100%; margin-bottom: 3px; }
 .chan.paused .out { opacity: .5; }
+.chan .out.ident { white-space: normal; font: 13.5px/1.5 var(--font); }
+.chan .out.ident:empty::before { content: "Écoute du signal, puis identification…"; }
+.id-meas { margin: 0 0 10px; color: var(--muted); font-size: 12.5px; }
+.id-meas b { color: var(--text); font-weight: 400; }
+.id-ok { border: 1px solid var(--ok); border-radius: 8px; padding: 8px 10px; margin-bottom: 10px; display: grid; gap: 6px; justify-items: start; }
+.id-head { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.id-badge { font-size: 11.5px; color: var(--ok); text-transform: uppercase; letter-spacing: .04em; }
+.id-par { color: var(--muted); font-size: 12.5px; }
+.id-text { font: 13.5px/1.4 var(--mono); color: var(--text); word-break: break-word; }
+.id-wait, .id-none { color: var(--muted); margin: 0 0 8px; }
+.id-wait::after { content: ""; display: inline-block; width: 10px; height: 10px; margin-left: 8px; border: 2px solid var(--gold);
+  border-right-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: -1px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.id-list { margin: 0; padding-left: 22px; display: grid; gap: 6px; }
+.id-list li::marker { color: var(--muted); font-size: 12px; }
+.id-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.id-row a { color: var(--text); text-decoration: none; }
+.id-row a:hover { color: var(--gold); text-decoration: underline; }
+.id-var { font-size: 12px; color: var(--gold); border: 1px solid var(--gold-soft); border-radius: 4px; padding: 0 5px; }
+.id-bar { width: 70px; height: 5px; background: var(--raise); border-radius: 3px; overflow: hidden; margin-left: auto; }
+.id-bar i { display: block; height: 100%; background: var(--gold); }
+.id-why { font-size: 12px; color: var(--muted); }
 table.msgs { width: 100%; border-collapse: collapse; font: 13.5px/1.45 var(--mono); }
 table.msgs td { padding: 1px 6px 1px 0; white-space: nowrap; }
 table.msgs td.m { white-space: normal; width: 100%; }
