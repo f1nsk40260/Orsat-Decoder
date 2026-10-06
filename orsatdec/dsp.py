@@ -73,14 +73,15 @@ class ToneFinder:
             return None
         noise = np.median(sp[sel]) + 1e-20
         cands = np.arange(center - span, center + span + df, df)
-        def power(fc):
-            if shift > 0:
-                return np.interp(fc - shift / 2, f, sp) + np.interp(fc + shift / 2, f, sp)
-            return np.interp(fc, f, sp)
         # lissage léger : la puissance d'un signal modulé s'étale sur quelques bins
         k = max(1, int(round(8 / df)))
-        pw = np.array([power(c) for c in cands])
-        pw = np.convolve(pw, np.ones(k) / k, mode="same")
+        sps = np.convolve(sp, np.ones(k) / k, mode="same")
+        if shift > 0:
+            # les DEUX tonalités doivent être là : avec la somme, une longue suite de 1 (une seule
+            # tonalité) faisait choisir la paire décalée d'un shift, et le décodeur s'inversait
+            pw = 2 * np.minimum(np.interp(cands - shift / 2, f, sps), np.interp(cands + shift / 2, f, sps))
+        else:
+            pw = np.interp(cands, f, sps)
         i = int(np.argmax(pw))
         ref = noise * (2 if shift > 0 else 1)
         if pw[i] < min_ratio * ref:

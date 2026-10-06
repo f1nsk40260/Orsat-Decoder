@@ -19,6 +19,9 @@ from .decoders.sstv import SSTV
 from .decoders.hell import Hell
 from .decoders.sitora import SitorA
 from .decoders.packet import AX25
+from .decoders.tones import DTMF, Selcall, ICAOSelcal, SELCALL
+from .decoders.dsc import DSC
+from .decoders.pocsag import POCSAG
 from .decoders.ident import Identifier, SPAN as IDENT_SPAN
 
 DIR = {"key": "reverse", "label": "Sens", "opts": [[False, "Normal"], [True, "Inversé"]], "def": False}
@@ -142,6 +145,25 @@ MODES += [
     {"id": "packet1200", "label": "Packet 1200 / APRS", "family": "Packet", "desc": "AX.25 1200 bauds AFSK en FM (APRS 144,800 MHz). Cliquez au centre du signal.",
      "af": 0, "whole": True, "demod": "FM", "kind": "msg", "crc": True,
      "make": lambda fs, af, p: AX25(fs, 1700.0, baud=1200.0, shift=1000.0)},
+    {"id": "dsc", "label": "DSC / ASN HF-MF", "family": "Maritime", "desc": "Appel sélectif numérique (2187,5 kHz, 8414,5 kHz…) et selcall HF CCIR 493-4 (Codan, Barrett).",
+     "af": 1700, "bw": 340, "kind": "msg", "crc": True,
+     "make": lambda fs, af, p: DSC(fs, af, baud=100.0, shift=170.0)},
+    {"id": "dsc_vhf", "label": "DSC / ASN VHF", "family": "Maritime", "desc": "Canal 70 (156,525 MHz), 1200 bauds en FM.",
+     "af": 0, "whole": True, "demod": "FM", "kind": "msg", "crc": True,
+     "make": lambda fs, af, p: DSC(fs, 1700.0, baud=1200.0, shift=800.0)},
+    {"id": "selcal", "label": "Selcal (aviation)", "family": "Sélectifs", "desc": "Appel sélectif OACI des avions en HF (AB-CD). Cliquez sur la porteuse.",
+     "af": 0, "whole": True, "carrier": True, "kind": "msg",
+     "make": lambda fs, af, p: ICAOSelcal(fs)},
+    {"id": "selcall5", "label": "Appels à 5 tons", "family": "Sélectifs", "desc": "CCIR, ZVEI, EEA, EIA… (taxis, pompiers, PMR), en FM.",
+     "af": 0, "whole": True, "demod": "FM", "kind": "msg",
+     "params": [{"key": "std", "label": "Standard", "opts": [["auto", "Automatique"]] + [[k, k] for k in SELCALL], "def": "auto"}],
+     "make": lambda fs, af, p: Selcall(fs, standard=p.get("std", "auto"))},
+    {"id": "dtmf", "label": "DTMF", "family": "Sélectifs", "desc": "Fréquences vocales (touches de téléphone), en FM.",
+     "af": 0, "whole": True, "demod": "FM", "kind": "msg",
+     "make": lambda fs, af, p: DTMF(fs)},
+    {"id": "pocsag", "label": "POCSAG (pagers)", "family": "Sélectifs", "desc": "Récepteurs d'appel 512, 1200 et 2400 bauds, en FM (VHF / UHF).",
+     "af": 0, "whole": True, "demod": "FM", "kind": "msg", "crc": True,
+     "make": lambda fs, af, p: POCSAG(fs, compensate=p.get("_src") == "phantom")},
 ]
 
 BY_ID = {m["id"]: m for m in MODES}
@@ -173,6 +195,15 @@ PRESETS = [
     {"label": "SSTV 20 m", "mode": "sstv", "freq": 14230000},
     {"label": "Olivia 8/250 40 m", "mode": "olivia", "freq": 7072500, "params": {"tones": 8, "bw": 250}},
     {"label": "APRS 144,800 MHz", "mode": "packet1200", "freq": 144800000},
+    {"label": "DSC 2187,5 kHz", "mode": "dsc", "freq": 2187500},
+    {"label": "DSC 4207,5 kHz", "mode": "dsc", "freq": 4207500},
+    {"label": "DSC 6312 kHz", "mode": "dsc", "freq": 6312000},
+    {"label": "DSC 8414,5 kHz", "mode": "dsc", "freq": 8414500},
+    {"label": "DSC 12577 kHz", "mode": "dsc", "freq": 12577000},
+    {"label": "DSC 16804,5 kHz", "mode": "dsc", "freq": 16804500},
+    {"label": "DSC VHF canal 70", "mode": "dsc_vhf", "freq": 156525000},
+    {"label": "Selcal Shanwick 8879 kHz", "mode": "selcal", "freq": 8879000},
+    {"label": "Selcal Shanwick 5598 kHz", "mode": "selcal", "freq": 5598000},
     {"label": "APRS HF 10147,6 kHz", "mode": "packet300", "freq": 10149300},
     {"label": "Olivia 8/250 20 m", "mode": "olivia", "freq": 14072500, "params": {"tones": 8, "bw": 250}},
     {"label": "Olivia 32/1000 20 m", "mode": "olivia", "freq": 14075400, "params": {"tones": 32, "bw": 1000}},

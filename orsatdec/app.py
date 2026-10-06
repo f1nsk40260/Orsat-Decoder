@@ -189,7 +189,8 @@ class Channel:
             return
         if self.decoder is None or fs != self.fs:
             self.fs = fs
-            self.decoder = self.mode["make"](fs, self.app.src.decoder_af(self), self.params)
+            # « _src » : type de source, pour les décodeurs qui doivent défaire un traitement du serveur
+            self.decoder = self.mode["make"](fs, self.app.src.decoder_af(self), {**self.params, "_src": self.app.src.kind})
             if self.mode.get("kind") == "ident":
                 self.decoder.rf = self.app.src.chan_freq(self)     # fréquence radio, si la source la connaît
             if self.state in ("connexion", "reconnexion"):
@@ -490,11 +491,12 @@ class App:
             self._add_channel(mode["id"], freq=f, params=m.get("params"))
             return
         dial = f if mode.get("whole") else f - mode["af"]
-        if await src.qsy(dial, "usb"):
+        if await src.qsy(dial, mode.get("demod", "usb").lower()):
             self._add_channel(mode["id"], af=0.0 if mode.get("whole") else float(mode["af"]), params=m.get("params"))
         else:
             await self._send(ws, json.dumps({"t": "notice", "level": "error",
-                "text": f"Pas de contrôle CAT sur cette source : réglez le récepteur sur {dial / 1000:.1f} kHz en USB, "
+                "text": f"Pas de contrôle CAT sur cette source : réglez le récepteur sur {dial / 1000:.1f} kHz "
+                        f"en {mode.get('demod', 'USB').upper()}, "
                         f"puis cliquez sur le signal dans le waterfall."}))
 
     async def hello(self, ws):

@@ -778,6 +778,8 @@ function initWaterfall() {
       f = S.server.basefreq;
     } else if (m.demod === 'FM') {
       f = Math.round(f / 500) * 500;                // FM : centre du signal
+    } else if (m.carrier) {
+      f = Math.round(f / 100) * 100;                // tonalités mesurées depuis la porteuse (Selcal)
     } else if (m.whole) {
       const near = S.catalog.presets.filter(p => p.mode === m.id).map(p => p.freq).find(p => f >= p - 500 && f <= p + 3500);
       f = near ?? Math.round(f - 1500);

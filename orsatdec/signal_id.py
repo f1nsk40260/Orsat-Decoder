@@ -43,6 +43,9 @@ DECODABLE = {
     # jalon 3
     296: [("sitora", {"reverse": r}) for r in (False, True)],
     955: [("packet300", {})],
+    429: [("dsc", {})],
+    2213: [("dsc", {})],
+    2276: [("selcal", {})],
     1981: [("ascii", {"baud": b, "shift": s, "bits": n, "reverse": r}) for b in (110.0, 75.0, 150.0, 300.0, 50.0)
            for s in (170.0, 425.0, 850.0) for n in (7, 8) for r in (False, True)],
 }
