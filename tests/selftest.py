@@ -82,6 +82,20 @@ def check_js8():
     return ok
 
 
+def check_jt():
+    """JT65A et JT9 : deux stations à -18 dB dans une minute."""
+    from orsatdec.decoders import jt as J
+    ok = True
+    for kind in ("jt65", "jt9"):
+        msgs = ["CQ F1NSK JN03", "K1JT F1NSK -15"]
+        x = add_noise(J.jt_audio(kind, [(1270.0, msgs[0]), (1500.0, msgs[1])]), -18, FS, seed=4)
+        got = [d["text"] for d in J.decode_window(x, FS, kind)]
+        good = sorted(got) == sorted(msgs)
+        ok &= good
+        print(f"  {'OK ' if good else 'ÉCHEC'}  {kind.upper():<10}  -18 dB   {', '.join(got) or 'rien'}")
+    return ok
+
+
 def check_flac():
     """Chaîne FLAC des serveurs PhantomSDR-Plus : encodage en blocs de 256, décodage en continu."""
     try:
@@ -126,6 +140,7 @@ def main():
         check_ft8(),
         check_wspr(),
         check_js8(),
+        check_jt(),
         check_flac(),
     ]
     # jalon 2 : chaque banc de test fournit ses cas rapides

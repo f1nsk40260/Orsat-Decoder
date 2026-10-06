@@ -32,6 +32,7 @@ from .decoders.pactor import PactorI
 from .decoders.acars import ACARS
 from .decoders.hfdl import HFDL
 from .decoders.js8 import JS8
+from .decoders.jt import JT
 from .decoders.ident import Identifier, SPAN as IDENT_SPAN
 
 DIR = {"key": "reverse", "label": "Sens", "opts": [[False, "Normal"], [True, "Inversé"]], "def": False}
@@ -84,6 +85,12 @@ MODES = [
      "af": 0, "whole": True, "kind": "msg", "make": lambda fs, af, p: FT8(fs, 1500, ft4=True)},
     {"id": "wspr", "label": "WSPR", "family": "Signaux faibles", "desc": "Balises de propagation, créneaux de 2 min (minutes paires).",
      "af": 0, "whole": True, "kind": "msg", "make": lambda fs, af, p: WSPR(fs)},
+    {"id": "jt65", "label": "JT65A", "family": "Signaux faibles", "desc": "Créneaux d'une minute, toute la bande audio (Reed-Solomon, décodage algébrique).",
+     "af": 0, "whole": True, "kind": "msg", "crc": True, "make": lambda fs, af, p: JT(fs, "jt65", "A")},
+    {"id": "jt65b", "label": "JT65B", "family": "Signaux faibles", "desc": "JT65B (VHF), créneaux d'une minute.",
+     "af": 0, "whole": True, "kind": "msg", "crc": True, "make": lambda fs, af, p: JT(fs, "jt65", "B")},
+    {"id": "jt9", "label": "JT9", "family": "Signaux faibles", "desc": "JT9A, créneaux d'une minute, toute la bande audio (Fano de wsprd).",
+     "af": 0, "whole": True, "kind": "msg", "crc": True, "make": lambda fs, af, p: JT(fs, "jt9")},
     {"id": "js8", "label": "JS8 normal", "family": "Signaux faibles", "desc": "JS8Call : créneaux de 15 s, toute la bande audio (balises, CQ, messages dirigés, texte libre).",
      "af": 0, "whole": True, "kind": "msg", "crc": True, "make": lambda fs, af, p: JS8(fs, "A")},
     {"id": "js8b", "label": "JS8 rapide", "family": "Signaux faibles", "desc": "JS8Call rapide : créneaux de 10 s.",
@@ -262,6 +269,10 @@ PRESETS = [
     {"label": "Météo DWD 7646 kHz", "mode": "rtty", "freq": 7646000, "params": {"baud": 50.0, "shift": 450.0, "reverse": True}},
     {"label": "Météo DWD 10100,8 kHz", "mode": "rtty", "freq": 10100800, "params": {"baud": 50.0, "shift": 450.0, "reverse": True}},
     {"label": "FT8 160 m", "mode": "ft8", "freq": 1840000},
+    {"label": "JT65 40 m", "mode": "jt65", "freq": 7076000},
+    {"label": "JT65 20 m", "mode": "jt65", "freq": 14076000},
+    {"label": "JT9 40 m", "mode": "jt9", "freq": 7078000},
+    {"label": "JT9 20 m", "mode": "jt9", "freq": 14078000},
     {"label": "JS8 80 m", "mode": "js8", "freq": 3578000},
     {"label": "JS8 40 m", "mode": "js8", "freq": 7078000},
     {"label": "JS8 30 m", "mode": "js8", "freq": 10130000},

@@ -3,18 +3,48 @@
    Décodage : wspr_decode_iq fichier.iq [fréquence_cadran_Hz]
      fichier.iq : flottants 32 bits I,Q entrelacés à 375 Hz, bande WSPR centrée sur 0 Hz
      (fréquence audio 1500 Hz). Une ligne par message : snr dt freq_hz drift indicatif locator puissance
-   Symboles (tests) : wspr_decode_iq -e "F1NSK JN03 30"  -> les 162 symboles de canal (0..3) */
+   Symboles (tests) : wspr_decode_iq -e "F1NSK JN03 30"  -> les 162 symboles de canal (0..3)
+   Fano (JT9, même code K=32) : wspr_decode_iq -f [nbits] < 2*nbits octets souples (0..255, 128 = doute)
+     -> les octets décodés en hexadécimal et la métrique, ou FAIL */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include "wsprd.h"
 #include "wsprsim_utils.h"
+#include "fano.h"
+
+extern float metric_tables[5][256];
+
+static int fano_mode(int nbits) {
+    unsigned char sym[2 * 128];
+    if (nbits < 1 || nbits > 128 || fread(sym, 1, 2 * nbits, stdin) != (size_t)(2 * nbits))
+        return 1;
+    int mettab[2][256];
+    float bias = 0.45f;
+    for (int i = 0; i < 256; i++) {
+        mettab[0][i] = (int)roundf(10.0f * (metric_tables[2][i] - bias));
+        mettab[1][i] = (int)roundf(10.0f * (metric_tables[2][255 - i] - bias));
+    }
+    unsigned char data[17] = {0};
+    unsigned int metric = 0, cycles = 0, maxnp = 0;
+    if (fano(&metric, &cycles, &maxnp, data, sym, nbits, mettab, 60, 10000)) {
+        printf("FAIL\n");
+        return 0;
+    }
+    for (int i = 0; i < (nbits + 7) / 8; i++)
+        printf("%02x", data[i]);
+    printf(" %u\n", metric);
+    return 0;
+}
 
 int main(int argc, char **argv) {
     if (argc < 2) {
         fprintf(stderr, "usage: %s fichier.iq [cadran_Hz] | -e \"CALL LOC PWR\"\n", argv[0]);
         return 1;
     }
+    if (strcmp(argv[1], "-f") == 0)
+        return fano_mode(argc > 2 ? atoi(argv[2]) : 103);
     if (strcmp(argv[1], "-e") == 0 && argc > 2) {
         static char hashtab[HASHTAB_SIZE * HASHTAB_ENTRY_LEN];
         static char loctab[HASHTAB_SIZE * LOCTAB_ENTRY_LEN];
