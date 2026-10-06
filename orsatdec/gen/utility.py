@@ -603,3 +603,62 @@ def dgps_encode(frames, baud=200.0, fs=12000, af=1000.0, amp=0.5):
     idx = np.minimum((np.arange(n) / spb).astype(int), len(bits) - 1)
     f = af + (np.array(bits)[idx] * 2 - 1) * baud / 4
     return amp * np.cos(2 * np.pi * np.cumsum(f) / fs)
+
+
+# ---------------------------------------------------------------------------------------------- PACTOR I
+def pactor_packet(payload, counter, baud=200.0, fmt=0, flags=0):
+    """Paquet PACTOR I (octets) : en-tête 0x55, données complétées, état, CRC X.25."""
+    from ..decoders.pactor import crc16
+    n = 20 if baud > 150 else 8
+    if fmt == 0:
+        data = bytes(payload)[:n].ljust(n, b"\x1e")
+    else:
+        bits = payload[:n * 8].ljust(n * 8, "0")
+        data = bytes(int(bits[i:i + 8][::-1], 2) for i in range(0, n * 8, 8))
+    st = (counter & 3) | (fmt << 2) | flags
+    body = data + bytes([st])
+    c = crc16(body)
+    return bytes([0x55]) + body + bytes([c & 0xFF, c >> 8])
+
+
+def pactor_split(text, baud=200.0, huffman=False):
+    """Texte -> charges utiles successives (octets ASCII, ou chaînes de bits Huffman sans coupure de code)."""
+    n = 20 if baud > 150 else 8
+    if not huffman:
+        b = text.encode("latin-1")
+        return [b[i:i + n] for i in range(0, len(b), n)]
+    from ..decoders.pactor import HUFFMAN
+    out, cur = [], ""
+    for c in text:
+        code = HUFFMAN[c]
+        if len(cur) + len(code) > n * 8:
+            out.append(cur)
+            cur = ""
+        cur += code
+    return out + ([cur] if cur else [])
+
+
+def pactor_encode(text, baud=200.0, fs=12000, af=1500.0, shift=200.0, amp=0.5, repeats=2, huffman=False, qrt=True):
+    """Liaison ARQ vue par un écouteur : cycle de 1,25 s, paquet de 0,96 s ; chaque paquet est émis
+    `repeats` fois (répétitions ARQ, la deuxième copie en polarité inverse), puis un paquet QRT."""
+    pays = pactor_split(text, baud, huffman)
+    pk = [pactor_packet(p, i, baud, 1 if huffman else 0) for i, p in enumerate(pays)]
+    pk.append(pactor_packet(b"", len(pays), baud, 0, 0x80))
+    spb = fs / baud
+    cyc = int(1.25 * fs)
+    sig = []
+    ph = 0.0
+    for p in pk:
+        for r in range(repeats):
+            bits = [(b >> i) & 1 for b in p for i in range(8)]
+            if r % 2:
+                bits = [1 - b for b in bits]
+            n = int(len(bits) * spb)
+            idx = np.minimum((np.arange(n) / spb).astype(int), len(bits) - 1)
+            f = af + (np.array(bits)[idx] - 0.5) * shift
+            phs = ph + 2 * np.pi * np.cumsum(f) / fs
+            ph = phs[-1]
+            seg = np.zeros(cyc)
+            seg[:n] = amp * np.cos(phs)
+            sig.append(seg)
+    return np.concatenate(sig)

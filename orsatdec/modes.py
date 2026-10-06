@@ -28,6 +28,7 @@ from .decoders.throb import Throb
 from .decoders.fsq import FSQ
 from .decoders.wspr import WSPR
 from .decoders.dgps import DGPS
+from .decoders.pactor import PactorI
 from .decoders.ident import Identifier, SPAN as IDENT_SPAN
 
 DIR = {"key": "reverse", "label": "Sens", "opts": [[False, "Normal"], [True, "Inversé"]], "def": False}
@@ -176,6 +177,9 @@ MODES += [
     {"id": "dsc_vhf", "label": "DSC / ASN VHF", "family": "Maritime", "desc": "Canal 70 (156,525 MHz), 1200 bauds en FM.",
      "af": 0, "whole": True, "demod": "FM", "kind": "msg", "crc": True,
      "make": lambda fs, af, p: DSC(fs, 1700.0, baud=1200.0, shift=800.0)},
+    {"id": "pactor", "label": "PACTOR I (écoute)", "family": "TOR / ARQ", "desc": "Liaisons PACTOR I en ARQ ou FEC, 100 et 200 bauds, 200 Hz (Memory-ARQ, Huffman). Cliquez au centre des deux tonalités.",
+     "af": 1500, "bw": 600, "kind": "text", "crc": True,
+     "make": lambda fs, af, p: PactorI(fs, af)},
     {"id": "dgps", "label": "DGPS 200 bauds", "family": "Maritime", "desc": "Balises de correction GPS (RTCM SC-104, 283,5 à 325 kHz), MSK 200 bauds. Cliquez au centre du signal.",
      "af": 1000, "bw": 300, "kind": "msg", "crc": True,
      "make": lambda fs, af, p: DGPS(fs, af, baud=200.0)},

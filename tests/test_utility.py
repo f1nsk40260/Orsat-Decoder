@@ -75,6 +75,10 @@ def cases():
          "Station 683 · H+10:02.4 · texte : ORSAT DGPS TEST 73\n")
     sig = U.dgps_encode(fr, 200.0, af=1013)
     out.append(("DGPS 200", sig, lambda: make("dgps", 1000), t, 0))
+    t = "CQ CQ de F1NSK : essai PACTOR I depuis Orsat-Decoder, 73 !\r\n0123456789 abcdefghijklmnopqrstuvwxyz\r\n"
+    exp = t.replace("\r\n", "\n") + "\n[QRT : fin de liaison]\n"
+    out.append(("PACTOR I 200", U.pactor_encode(t, 200.0), lambda: make("pactor", 1500), exp, 3))
+    out.append(("PACTOR I Huffman", U.pactor_encode(t, 100.0, huffman=True), lambda: make("pactor", 1500), exp, 3))
     return out
 
 
