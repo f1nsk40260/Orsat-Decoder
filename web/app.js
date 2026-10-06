@@ -519,9 +519,16 @@ function toggleMap(c) {
   if (!window.L) { div.textContent = 'Bibliothèque de carte absente (web/vendor/leaflet).'; return; }
   if (!c.map) {
     c.map = L.map(div, { worldCopyJump: true, minZoom: 1 }).setView([40, 0], 2);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      subdomains: 'abcd', maxZoom: 12,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
+    // fond hors ligne (pays Natural Earth, embarqué) : la carte reste lisible sans Internet
+    c.map.createPane('world').style.zIndex = 150;
+    fetch('vendor/world/countries-110m.json').then(r => r.json()).then(g => {
+      L.geoJSON(g, { pane: 'world', interactive: false,
+        style: { color: '#4A6276', weight: 0.8, fillColor: '#1E2C39', fillOpacity: 1 } }).addTo(c.map);
+    }).catch(() => {});
+    // fond détaillé OpenStreetMap (sans clé), assombri ; s'il ne charge pas, le fond hors ligne reste visible
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 12, className: 'osm-dark',
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">contributeurs OpenStreetMap</a> · Natural Earth',
     }).addTo(c.map);
     c.mapLayer = L.layerGroup().addTo(c.map);
     c.mapFitted = false;

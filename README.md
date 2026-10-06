@@ -88,8 +88,8 @@ le temps de remplir son désentrelaceur, et MT63 affiche le texte avec une dizai
 retard. FT8, FT4, WSPR, JT65, JT9 et JS8 décodent toute la bande audio à la fin de chaque créneau UTC.
 
 **Carte HFDL** : le bouton **Carte** d'un canal HFDL affiche les avions dont une position a été reçue
-(indicatif du vol, trace, heure), et les stations au sol entendues. Le fond de carte (OpenStreetMap /
-CARTO) demande une connexion Internet.
+(indicatif du vol, trace, heure), et les stations au sol entendues. Le fond détaillé vient d'OpenStreetMap
+(connexion Internet) ; sans Internet, une carte simplifiée des pays, embarquée, le remplace.
 
 **Images** : elles s'affichent dans la carte du canal au fil de la réception. Le fax démarre seul sur
 la tonalité de départ et se cale sur les lignes de phasage. Le SSTV démarre sur le code VIS. Chaque
@@ -210,6 +210,7 @@ Orsat-Decoder s'appuie sur le travail de nombreux auteurs de logiciels libres :
 | LinuxALE | conventions du codage Golay et de l'entrelacement ALE 2G | GPL |
 | [Artemis](https://github.com/AresValley/Artemis) / sigidwiki.com | base d'identification des signaux | GPL-3 |
 | [Leaflet](https://leafletjs.com/) | carte HFDL, embarqué dans `web/vendor` | BSD-2 |
+| [world-atlas](https://github.com/topojson/world-atlas) (Natural Earth) | fond de carte hors ligne | ISC / domaine public |
 
 ## Pour le développement
 

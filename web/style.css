@@ -257,3 +257,5 @@ dialog code { color: var(--text); }
 .leaflet-tooltip.plane-lbl::before { display: none; }
 .leaflet-container { font: 13px/1.4 var(--font); }
 .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: var(--panel); color: var(--text); }
+.leaflet-container { background: #0D151D; }
+.osm-dark { filter: invert(1) hue-rotate(180deg) brightness(0.85) contrast(0.9) saturate(0.6); }
