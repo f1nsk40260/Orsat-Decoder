@@ -18,8 +18,9 @@
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: var(--night); color: var(--text); font: 14px/1.45 var(--font); }
-/* fond du serveur ORSAT (aurore boréale), panneaux translucides par-dessus */
-body { background: var(--night) url("background.jpg") no-repeat center center fixed; background-size: cover; }
+/* fond d'écran de F1NSK (légèrement assombri pour la lisibilité), panneaux translucides par-dessus */
+body { background: linear-gradient(#08060466, #08060466), var(--night) url("background.jpg") no-repeat center center fixed;
+  background-size: cover; }
 
 /* ascenseurs larges, faciles à attraper à la souris */
 * { scrollbar-width: auto; scrollbar-color: #C9A24A99 #0D151D80; }
@@ -241,3 +242,5 @@ dialog code { color: var(--text); }
 .menu button.fchip.nodec:hover { background: #ffffff1c; }
 .menu button.fchip span:last-child { color: inherit; }
 .frange { font-size: 12px; color: var(--muted); }
+.empty-state { background: #141E28cc; backdrop-filter: blur(6px); border: 1px solid var(--line); border-radius: 10px;
+  padding: 14px 20px; width: fit-content; max-width: 90%; margin-left: auto; margin-right: auto; }
