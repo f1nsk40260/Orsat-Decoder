@@ -67,6 +67,14 @@ def cases():
     w = U.ale_call("F1NSK", "ORSAT", "HELLO FROM ORSAT DECODER")
     out.append(("ALE 2G", U.ale_encode(w), lambda: make("ale", 1625),
                 "ALE TO F1NSK · CMD HELLO FROM ORSAT DECODER · TIS ORSAT\n", -3))
+    fr = [U.rtcm_frame(9, 683, 990, 0, U.rtcm_type9([(5, -12.34, 0.05, 17), (12, 8.5, -0.02, 99)]))] * 4 + [
+          U.rtcm_frame(3, 683, 1000, 1, U.rtcm_type3(48.8566, 2.3522, 65)),
+          U.rtcm_frame(9, 683, 1002, 2, U.rtcm_type9([(5, -12.34, 0.05, 17), (12, 8.5, -0.02, 99)])),
+          U.rtcm_frame(16, 683, 1004, 3, U.rtcm_type16("ORSAT DGPS TEST 73"))]
+    t = ("Station 683 · H+10:00.0 · station de référence 48.8566° N 2.3522° E, h 65 m\n"
+         "Station 683 · H+10:02.4 · texte : ORSAT DGPS TEST 73\n")
+    sig = U.dgps_encode(fr, 200.0, af=1013)
+    out.append(("DGPS 200", sig, lambda: make("dgps", 1000), t, 0))
     return out
 
 

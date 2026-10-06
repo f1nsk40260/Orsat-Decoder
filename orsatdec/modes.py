@@ -27,6 +27,7 @@ from .decoders.ale import ALE
 from .decoders.throb import Throb
 from .decoders.fsq import FSQ
 from .decoders.wspr import WSPR
+from .decoders.dgps import DGPS
 from .decoders.ident import Identifier, SPAN as IDENT_SPAN
 
 DIR = {"key": "reverse", "label": "Sens", "opts": [[False, "Normal"], [True, "Inversé"]], "def": False}
@@ -175,6 +176,12 @@ MODES += [
     {"id": "dsc_vhf", "label": "DSC / ASN VHF", "family": "Maritime", "desc": "Canal 70 (156,525 MHz), 1200 bauds en FM.",
      "af": 0, "whole": True, "demod": "FM", "kind": "msg", "crc": True,
      "make": lambda fs, af, p: DSC(fs, 1700.0, baud=1200.0, shift=800.0)},
+    {"id": "dgps", "label": "DGPS 200 bauds", "family": "Maritime", "desc": "Balises de correction GPS (RTCM SC-104, 283,5 à 325 kHz), MSK 200 bauds. Cliquez au centre du signal.",
+     "af": 1000, "bw": 300, "kind": "msg", "crc": True,
+     "make": lambda fs, af, p: DGPS(fs, af, baud=200.0)},
+    {"id": "dgps100", "label": "DGPS 100 bauds", "family": "Maritime", "desc": "Balises de correction GPS (RTCM SC-104), MSK 100 bauds.",
+     "af": 1000, "bw": 150, "kind": "msg", "crc": True,
+     "make": lambda fs, af, p: DGPS(fs, af, baud=100.0)},
     {"id": "selcal", "label": "Selcal (aviation)", "family": "Sélectifs", "desc": "Appel sélectif OACI des avions en HF (AB-CD). Cliquez sur la porteuse.",
      "af": 0, "whole": True, "carrier": True, "kind": "msg",
      "make": lambda fs, af, p: ICAOSelcal(fs)},

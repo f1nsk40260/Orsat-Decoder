@@ -536,3 +536,70 @@ def wspr_encode(stations, fs=12000, amp=0.5):
             ph = (ph + 2 * np.pi * f * m / fs) % (2 * np.pi)
             pos += m
     return out
+
+
+# ---------------------------------------------------------------------------------------------- DGPS
+def rtcm_frame(mtype, station, z, seq, words, health=0):
+    """Trame RTCM SC-104 : liste de mots de données de 24 bits (en-tête compris, sans parité)."""
+    h1 = (0x66 << 16) | (mtype << 10) | station
+    h2 = (z << 11) | (seq << 8) | (len(words) << 3) | health
+    return [h1, h2] + list(words)
+
+
+def rtcm_pack(fields):
+    """[(valeur, nombre de bits), …] -> mots de 24 bits (bourrage par des 1, comme le prévoit la norme)."""
+    bits = []
+    for v, n in fields:
+        bits += [(v >> (n - 1 - i)) & 1 for i in range(n)]
+    while len(bits) % 24:
+        bits.append(1)
+    return [int("".join(map(str, bits[i:i + 24])), 2) for i in range(0, len(bits), 24)]
+
+
+def rtcm_type9(sats):
+    """sats : [(PRN, PRC m, RRC m/s, IOD)] -> mots (facteur d'échelle 0,02 m)."""
+    f = []
+    for prn, prc, rrc, iod in sats:
+        f += [(0, 1), (0, 2), (prn & 31, 5), (int(round(prc / 0.02)) & 0xFFFF, 16),
+              (int(round(rrc / 0.002)) & 0xFF, 8), (iod, 8)]
+    return rtcm_pack(f)
+
+
+def rtcm_type3(lat, lon, h):
+    import math
+    a, fl = 6378137.0, 1 / 298.257223563
+    e2 = fl * (2 - fl)
+    la, lo = math.radians(lat), math.radians(lon)
+    n = a / math.sqrt(1 - e2 * math.sin(la) ** 2)
+    xyz = ((n + h) * math.cos(la) * math.cos(lo), (n + h) * math.cos(la) * math.sin(lo), (n * (1 - e2) + h) * math.sin(la))
+    return rtcm_pack([(int(round(v / 0.01)) & 0xFFFFFFFF, 32) for v in xyz])
+
+
+def rtcm_type16(text):
+    b = list(text.encode("ascii"))
+    while len(b) % 3:
+        b.append(0)
+    return [(b[i] << 16) | (b[i + 1] << 8) | b[i + 2] for i in range(0, len(b), 3)]
+
+
+def dgps_bits(frames, idle=60):
+    """Trames -> bits émis (parité GPS, D29*/D30* enchaînés ; trames nulles de type 6 en bourrage)."""
+    from ..decoders.dgps import encode_word
+    out = [0, 1] * idle
+    d29, d30 = 0, 0
+    for fr in frames:
+        for data in fr:
+            w = encode_word(data, d29, d30)
+            out += [(w >> (29 - i)) & 1 for i in range(30)]
+            d29, d30 = (w >> 1) & 1, w & 1
+    return out + [0, 1] * idle
+
+
+def dgps_encode(frames, baud=200.0, fs=12000, af=1000.0, amp=0.5):
+    """MSK : fréquence af ± débit/4 (bit 1 = fréquence haute), phase continue."""
+    bits = dgps_bits(frames)
+    spb = fs / baud
+    n = int(len(bits) * spb)
+    idx = np.minimum((np.arange(n) / spb).astype(int), len(bits) - 1)
+    f = af + (np.array(bits)[idx] * 2 - 1) * baud / 4
+    return amp * np.cos(2 * np.pi * np.cumsum(f) / fs)
