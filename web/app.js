@@ -692,6 +692,7 @@ function placeMarkers() {
     const m = S.byId[c.mode]; if (!m) continue;
     let a, b;
     if (m.demod === 'FM') { a = c.freq - 6000; b = c.freq + 6000; }
+    else if (m.demod === 'AM') { a = c.freq - 5000; b = c.freq + 5000; }
     else if (m.whole) { a = c.freq + 200; b = c.freq + 3000; }
     else if (m.kind === 'ident') { a = c.freq - 50; b = c.freq + 50; }   // repère étroit : le waterfall reste cliquable
     else { a = c.freq - c.bw / 2; b = c.freq + c.bw / 2; }
@@ -777,8 +778,8 @@ function initWaterfall() {
     }
     if (m.whole && S.server.shared) {
       f = S.server.basefreq;
-    } else if (m.demod === 'FM') {
-      f = Math.round(f / 500) * 500;                // FM : centre du signal
+    } else if (m.demod === 'FM' || m.demod === 'AM') {
+      f = Math.round(f / 500) * 500;                // FM, AM : centre du signal
     } else if (m.carrier) {
       f = Math.round(f / 100) * 100;                // tonalités mesurées depuis la porteuse (Selcal)
     } else if (m.whole) {

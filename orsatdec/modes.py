@@ -29,6 +29,7 @@ from .decoders.fsq import FSQ
 from .decoders.wspr import WSPR
 from .decoders.dgps import DGPS
 from .decoders.pactor import PactorI
+from .decoders.acars import ACARS
 from .decoders.ident import Identifier, SPAN as IDENT_SPAN
 
 DIR = {"key": "reverse", "label": "Sens", "opts": [[False, "Normal"], [True, "Inversé"]], "def": False}
@@ -186,6 +187,9 @@ MODES += [
     {"id": "dgps100", "label": "DGPS 100 bauds", "family": "Maritime", "desc": "Balises de correction GPS (RTCM SC-104), MSK 100 bauds.",
      "af": 1000, "bw": 150, "kind": "msg", "crc": True,
      "make": lambda fs, af, p: DGPS(fs, af, baud=100.0)},
+    {"id": "acars", "label": "ACARS", "family": "Aviation", "desc": "Messages des avions en VHF (131,725 / 131,525 MHz en Europe), AM, MSK 2400 bits/s. Cliquez au centre du canal.",
+     "af": 0, "whole": True, "demod": "AM", "kind": "msg", "crc": True,
+     "make": lambda fs, af, p: ACARS(fs)},
     {"id": "selcal", "label": "Selcal (aviation)", "family": "Sélectifs", "desc": "Appel sélectif OACI des avions en HF (AB-CD). Cliquez sur la porteuse.",
      "af": 0, "whole": True, "carrier": True, "kind": "msg",
      "make": lambda fs, af, p: ICAOSelcal(fs)},
@@ -269,6 +273,9 @@ PRESETS = [
     {"label": "SSTV 20 m", "mode": "sstv", "freq": 14230000},
     {"label": "Olivia 8/250 40 m", "mode": "olivia", "freq": 7072500, "params": {"tones": 8, "bw": 250}},
     {"label": "APRS 144,800 MHz", "mode": "packet1200", "freq": 144800000},
+    {"label": "ACARS Europe 131,725 MHz", "mode": "acars", "freq": 131725000},
+    {"label": "ACARS Europe 131,525 MHz", "mode": "acars", "freq": 131525000},
+    {"label": "ACARS États-Unis 131,550 MHz", "mode": "acars", "freq": 131550000},
     {"label": "DSC 2187,5 kHz", "mode": "dsc", "freq": 2187500},
     {"label": "DSC 4207,5 kHz", "mode": "dsc", "freq": 4207500},
     {"label": "DSC 6312 kHz", "mode": "dsc", "freq": 6312000},

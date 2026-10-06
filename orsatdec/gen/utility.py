@@ -662,3 +662,39 @@ def pactor_encode(text, baud=200.0, fs=12000, af=1500.0, shift=200.0, amp=0.5, r
             seg[:n] = amp * np.cos(phs)
             sig.append(seg)
     return np.concatenate(sig)
+
+
+# ---------------------------------------------------------------------------------------------- ACARS
+def acars_block(reg, label, text, mode="2", bid="1", ack="\x15", no="M01A", flight="AF1234"):
+    """Bloc ACARS (octets avec parité impaire, de SOH exclu au CRC inclus)."""
+    from ..decoders.acars import crc16
+
+    def par(c):
+        return c | (0x80 if bin(c).count("1") % 2 == 0 else 0)
+    body = mode + reg.rjust(7, ".") + ack + label + bid + "\x02"
+    if bid.isdigit():
+        body += no + flight.ljust(6)
+    body += text
+    b = bytes(par(ord(c)) for c in body) + bytes([0x83])
+    c = crc16(b)
+    return b + bytes([c & 0xFF, c >> 8])
+
+
+def acars_encode(blocks, fs=12000, amp=0.5, gap=0.5):
+    """Émission AM vue après démodulation : MSK 2400 bits/s, 1200 Hz (changement) / 2400 Hz."""
+    out = []
+    for blk in blocks:
+        data = bytes([0xFF] * 16) + bytes([0x2B, 0x2A, 0x16, 0x16, 0x01]) + blk + bytes([0x7F])
+        bits = [(b >> i) & 1 for b in data for i in range(8)]
+        spb = fs / 2400.0
+        n = int(len(bits) * spb)
+        # codage différentiel : un bit égal au précédent -> 2400 Hz, sinon 1200 Hz
+        prev, f = 1, []
+        for b in bits:
+            f.append(2400.0 if b == prev else 1200.0)
+            prev = b
+        idx = np.minimum((np.arange(n) / spb).astype(int), len(bits) - 1)
+        ph = 2 * np.pi * np.cumsum(np.array(f)[idx]) / fs
+        out += [np.zeros(int(gap * fs)), amp * np.cos(ph)]
+    out.append(np.zeros(int(gap * fs)))
+    return np.concatenate(out)

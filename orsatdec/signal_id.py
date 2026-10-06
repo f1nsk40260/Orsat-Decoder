@@ -53,6 +53,7 @@ DECODABLE = {
     5137: [("wspr", {})],
     2473: [("dgps", {}), ("dgps100", {})],
     887: [("pactor", {})],
+    44: [("acars", {})],
     1443: [(m, {}) for m in ("throb1", "throb2", "throb4", "throbx1", "throbx2", "throbx4")],
     140: [("psk31", {}), ("psk63", {}), ("psk125", {}), ("psk250", {}), ("psk500", {}), ("qpsk31", {}),
           ("qpsk63", {}), ("qpsk125", {}), ("psk125r", {}), ("psk250r", {}), ("psk500r", {})],

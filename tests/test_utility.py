@@ -79,6 +79,10 @@ def cases():
     exp = t.replace("\r\n", "\n") + "\n[QRT : fin de liaison]\n"
     out.append(("PACTOR I 200", U.pactor_encode(t, 200.0), lambda: make("pactor", 1500), exp, 3))
     out.append(("PACTOR I Huffman", U.pactor_encode(t, 100.0, huffman=True), lambda: make("pactor", 1500), exp, 3))
+    from orsatdec.decoders import acars as A
+    blk = U.acars_block("F-GZNA", "H1", "#M1BPOSN48123E002345,ORSAT,123456,350,TEST")
+    t = A.describe(A.parse(blk[:-2])) + "\n"
+    out.append(("ACARS", U.acars_encode([blk]), lambda: make("acars", 0), t, 6))
     return out
 
 
