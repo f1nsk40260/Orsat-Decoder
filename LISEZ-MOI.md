@@ -88,6 +88,22 @@ Les serveurs Orsat-SDR récents refusent les clients qui ne déclarent pas leur 
 | Olivia | Olivia et Contestia, 4 à 64 tonalités, 125 à 2000 Hz | Olivia 32/1000 −14 dB, 8/250 −16 dB |
 | MT63 | 500, 1000, 2000, entrelacement court ou long | MT63-1000 long −8 dB |
 | Images | Fax météo (IOC 576/288, 60 à 240 l/min), SSTV (Martin, Scottie, Robot, PD, Wraase, code VIS automatique), Hellschreiber (Feld, Slow, X5, X9, FSK Hell, Hell 80) | |
+| PSK (suite) | PSK250 à 1000, QPSK31 à 500, PSK-R 125 à 1000 | QPSK31 ≈ −6 dB, PSK250R ≈ −3 dB |
+| Modes fldigi | THROB et THROBX 1/2/4, FSQ, IFKP | ≈ −10 dB |
+| Signaux faibles (suite) | WSPR (wsprd embarqué), JS8 normal / rapide / turbo / lent, JT65A/B, JT9 | WSPR −24 dB, JS8 ≈ −15 dB, JT65 ≈ −20 dB, JT9 ≈ −22 dB |
+| Télex et TOR | ASCII 110 bd, SITOR-A (AMTOR ARQ), PACTOR I en écoute (ARQ et FEC, 100/200 bd, Memory-ARQ, Huffman) | ≈ 0 dB |
+| Packet | AX.25 300 bd (HF) et 1200 bd (APRS en FM), positions APRS | 300 bd ≈ +3 dB |
+| Maritime (suite) | DSC/ASN HF-MF et VHF, selcall CCIR 493-4, DGPS (RTCM SC-104, 100/200 bd) | DSC HF −3 dB, DGPS 0 dB |
+| Aviation | HFDL (squitters, positions, ACARS), ACARS VHF (AM), Selcal OACI | HFDL +6 dB à 1800 bits/s |
+| Sélectifs | DTMF, 5 tons (CCIR, EEA, ZVEI…), POCSAG 512/1200/2400 | ≈ 0 à +3 dB |
+| ALE | ALE 2G (MIL-STD-188-141) | ≈ −3 dB |
+| Signaux horaires | DCF77, MSF, TDF, WWVB, JJY, WWV/WWVH, CHU | ≈ 0 à +6 dB (TDF +10 dB) |
+
+Orsat-Decoder ne fait que recevoir : les fonctions d'émission de MultiPSK n'ont pas été reprises.
+Tous les modes ci-dessus ont été vérifiés sur des enregistrements réels de la base Artemis, sauf
+TDF et CHU (seulement sur des signaux générés) et les débits HFDL 1200 / 1800 bits/s (aucun
+enregistrement disponible). POCSAG à 512 bauds passe mal par un serveur PhantomSDR, dont le filtre
+anti-continu déforme ce débit.
 
 Les modes MFSK, Olivia et MT63 suivent l'émetteur de fldigi bit pour bit (vérifié en compilant le code de fldigi). Sur du bruit seul, aucun ne doit rien imprimer : la squelch s'appuie sur le code correcteur de chaque mode. Revers de la médaille : un canal MFSK/THOR qu'on vient d'ouvrir reste muet quelques secondes (7 s en MFSK16), le temps de remplir son désentrelaceur, et MT63 affiche le texte avec une dizaine de secondes de retard.
 

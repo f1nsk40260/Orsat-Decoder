@@ -141,7 +141,7 @@ class ACARS(Decoder):
     name = "ACARS"
     kind = "msg"
 
-    def __init__(self, fs, af=1800.0):
+    def __init__(self, fs, af=1800.0, phase=0, _sub=False):
         super().__init__(fs, 1800.0)
         self.fs = float(fs)
         self.flen = int(self.fs / 1200) + 1
@@ -163,6 +163,11 @@ class ACARS(Decoder):
         self.count = 0
         self.last = None
         self.lvl = 0.0
+        # deux démodulateurs décalés d'un demi-bit et d'une voie (I/Q) : l'accrochage ne dépend plus du hasard
+        self.S = phase
+        self.clk = 0.75 * math.pi * phase
+        self.subs = [] if _sub else [ACARS(fs, af, phase=1, _sub=True)]
+        self.recent = []
 
     def status(self):
         return {"af": 1800.0, "last": self.count, "info": f"écart {self.df * self.fs / 2 / math.pi:+.0f} Hz"
@@ -200,6 +205,16 @@ class ACARS(Decoder):
                 self.S += 1
                 self.df = 0.52 * self.df + 0.48 * 38e-4 * dphi
         self.idx, self.phi, self.clk = idx, p, clk
+        for sub in self.subs:
+            out += sub.process(x)
+        if self.subs:
+            uniq = []
+            for ev in out:
+                if ev["text"] not in self.recent:
+                    self.recent = (self.recent + [ev["text"]])[-20:]
+                    uniq.append(ev)
+                    self.count += 1
+            out = uniq
         return out
 
     def _putbit(self, v, out):
@@ -274,5 +289,4 @@ class ACARS(Decoder):
         if key == self.last:
             return
         self.last = key
-        self.count += 1
         out.append({"t": "msg", "mode": "ACARS", "utc": time.strftime("%H%M%S", time.gmtime()), "text": describe(m)})

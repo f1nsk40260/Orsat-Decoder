@@ -82,7 +82,7 @@ def cases():
     from orsatdec.decoders import acars as A
     blk = U.acars_block("F-GZNA", "H1", "#M1BPOSN48123E002345,ORSAT,123456,350,TEST")
     t = A.describe(A.parse(blk[:-2])) + "\n"
-    out.append(("ACARS", U.acars_encode([blk]), lambda: make("acars", 0), t, 6))
+    out.append(("ACARS", U.acars_encode([blk]), lambda: make("acars", 0), t, 10))
     pdu = U.hfdl_perf_mpdu(7, 42, "AF0123", 48.8566, 2.3522, 12 * 3600 + 34 * 60 + 56)
     t = ("Squitter Shannon, Irlande (7) · synchro UTC · fréquences actives : 11384, 8942 kHz  [300 bits/s]\n"
          "avion 42 -> Shannon, Irlande (7) · données de performance · vol AF0123 · 48.8566° N 2.3521° E à 12:34:56 UTC"

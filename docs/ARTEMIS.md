@@ -23,6 +23,21 @@ de son mode (de vraies réceptions, avec fading, filtres BLU et parasites).
 | SSTV | Robot 36, mire BBC impeccable |
 | Fax météo | carte d'Europe nette à 120 l/min |
 | Feld Hell | texte parfaitement lisible |
+| ASCII 110 bd | « CQ … DE F6CTE » |
+| SITOR-A | « THIS IS DL6MAA TESTING… » |
+| Packet 300 bd | trames TSTR1>TSTR2 |
+| DSC | appel 002320001 ↔ 005030001 sur 8291,0 kHz et son accusé |
+| Selcall CCIR 493 | « de 5678 à 1234 » |
+| ALE 2G | appel complet avec message AMD |
+| THROB1 | « THE QUICK BROWN FOX… » |
+| WSPR | K3GAU EM89 33 et KL7EZ EM66 23 |
+| DGPS 200 bd | station 466, corrections de type 9 (55 trames en 60 s) |
+| PACTOR I 200 bd | télex « ZCZC CTR015 09H48 10/12/00 COPIE DE CTR0… » (CRC justes) |
+| ACARS | ZK-OKM vol NZ0006, label H1, et 9 autres blocs |
+| HFDL | squitters d'Auckland et un bloc ACARS montant vers VH-OQK (300 bits/s) |
+| JS8 | « FOR GOD SO LOVED THE WORLD IN THIS WAY; HE GAVE HIS ONE AND ONLY SO… » |
+| JT65A | « TEST12345 » (extrait de 30 s : symboles manquants traités en effacements) |
+| JT9 | « TEST » |
 
 ## 2. Identification automatique (`orsatdec/signal_id.py`)
 
@@ -77,23 +92,16 @@ de quelques secondes.
 
 ## 3. Nouveaux décodeurs suggérés par la base
 
-Les 249 signaux HF de moins de 3,5 kHz de la base, triés par intérêt et faisabilité.
-Spécification publique et contenu en clair, du plus simple au plus long :
+Les 249 signaux HF de moins de 3,5 kHz de la base, triés par intérêt et faisabilité. Faits depuis :
+signaux horaires, Packet, ASCII, SITOR-A, DSC, Selcal, CCIR 493, DTMF, ALE 2G, PACTOR I, WSPR, JT65,
+JT9, JS8, FSQ, THROB, HFDL, DGPS, ACARS. Restent :
 
 | Signal (fiches Artemis) | Pourquoi | Effort |
 |---|---|---|
-| **Signaux horaires** : DCF77, MSF, TDF, CHU, WWVB, JJY, RWM, BPC | heure décodée, très parlant avec le RX888 en ondes longues ; codes publics | faible |
-| **Packet AX.25 300 bd** (PACKET), APRS HF | trames lisibles, indicatifs ; démodulateur FSK déjà là | faible |
-| **ASCII FSK**, Baudot 50-75 bd des agences de presse | variantes du RTTY existant | faible |
-| **SITOR-A / AMTOR** | même code que Navtex, côté ARQ | faible |
-| **DSC (ASN maritime)**, Selcal OACI, CCIR 493-4, DTMF | déjà au jalon 3 ; mesures OK (100 bd, 170 Hz) | moyen |
-| **ALE 2G** (MIL-STD-188-141) | très fréquent en HF, adresses en clair ; 8 tonalités / 125 bd retrouvés par l'identification | moyen |
-| **PACTOR I** (FEC et écoute ARQ) | trafic maritime et radioamateur | moyen |
-| **WSPR, JT65, JT9, FST4/FST4W, JS8** | signaux faibles amateurs ; JS8 est très proche de FT8 (ft8_lib adaptable) | moyen |
-| **FSQ, THROB, DominoF** | modes fldigi qui complètent le jalon 2 | moyen |
-| **HFDL** | positions d'avions (jalon 3) | élevé |
+| **FST4 / FST4W**, MSK144 | signaux faibles amateurs (LDPC proches de FT8) | moyen |
+| **DominoF**, RSID de fldigi | compléments fldigi | moyen |
 | **FreeDV** (voix numérique, libcodec2) | on entendrait la voix : rejoint la voix numérique du jalon 4 | moyen (bibliothèque) |
-| **TOR militaires** : ARQ-E/E3, ARQ-M2/M4, FEC-A, ARQ6-90/98, SWED-ARQ, POL-ARQ, Coquelet, Piccolo | jalon 5, au cas par cas | moyen chacun |
+| **TOR militaires** : ARQ-E/E3, ARQ-M2/M4, FEC-A, ARQ6-90/98, SWED-ARQ, POL-ARQ, Coquelet, Piccolo | jalon 5, au cas par cas ; trafic le plus souvent chiffré | moyen chacun |
 | **STANAG 4285, MIL-STD-188-110** | démodulation publique (l'identification trouve déjà 2400 bd et l'ACF de 106,7 ms) ; contenu le plus souvent chiffré | élevé |
 
 À écarter pour le décodage : CLOVER, PACTOR II-IV, VARA (propriétaires), les modems militaires et les
