@@ -23,6 +23,9 @@ from .decoders.tones import DTMF, Selcall, ICAOSelcal, SELCALL
 from .decoders.dsc import DSC
 from .decoders.pocsag import POCSAG
 from .decoders.timecode import TimeCode, CHU
+from .decoders.ale import ALE
+from .decoders.throb import Throb
+from .decoders.fsq import FSQ
 from .decoders.ident import Identifier, SPAN as IDENT_SPAN
 
 DIR = {"key": "reverse", "label": "Sens", "opts": [[False, "Normal"], [True, "Inversé"]], "def": False}
@@ -40,6 +43,23 @@ MODES = [
      "make": lambda fs, af, p: PSK(fs, af, baud=62.5), "bw": 100},
     {"id": "psk125", "label": "PSK125", "family": "PSK", "desc": "", "af": 1000,
      "make": lambda fs, af, p: PSK(fs, af, baud=125.0), "bw": 180},
+    {"id": "psk250", "label": "PSK250", "family": "PSK", "desc": "", "af": 1000,
+     "make": lambda fs, af, p: PSK(fs, af, baud=250.0), "bw": 350},
+    {"id": "psk500", "label": "PSK500", "family": "PSK", "desc": "", "af": 1000,
+     "make": lambda fs, af, p: PSK(fs, af, baud=500.0), "bw": 700},
+    {"id": "psk1000", "label": "PSK1000", "family": "PSK", "desc": "", "af": 1500,
+     "make": lambda fs, af, p: PSK(fs, af, baud=1000.0), "bw": 1400},
+] + [
+    {"id": f"qpsk{b}", "label": f"QPSK{b}", "family": "PSK", "desc": "QPSK avec FEC (K=5), plus robuste que le BPSK." if b == 31 else "",
+     "af": 1000, "bw": int(b * 1.8) + 20, "make": (lambda b: lambda fs, af, p: PSK(fs, af, baud=float(b if b != 31 else 31.25)
+                                                                                   if b != 63 else 62.5, kind="qpsk"))(b)}
+    for b in (31, 63, 125, 250, 500)
+] + [
+    {"id": f"psk{b}r", "label": f"PSK{b}R", "family": "PSK", "desc": "PSK robuste de fldigi (FEC K=7, entrelacement), PSKmail." if b == 125 else "",
+     "af": 1000 if b < 1000 else 1500, "bw": int(b * 1.4) + 20,
+     "make": (lambda b, dp: lambda fs, af, p: PSK(fs, af, baud=float(b), kind="pskr", depth=dp))(b, dp)}
+    for b, dp in ((125, 40), (250, 80), (500, 160), (1000, 160))
+] + [
     {"id": "rtty", "label": "RTTY", "family": "RTTY et FSK", "desc": "Amateur (45 bd, 170 Hz) et météo DWD (50 bd, 425 Hz).",
      "af": 1000, "bw_from": "shift",
      "params": [{"key": "baud", "label": "Vitesse", "opts": [[45.45, "45 bd"], [50.0, "50 bd"], [75.0, "75 bd"], [100.0, "100 bd"]], "def": 45.45},
@@ -165,6 +185,26 @@ MODES += [
     {"id": "pocsag", "label": "POCSAG (pagers)", "family": "Sélectifs", "desc": "Récepteurs d'appel 512, 1200 et 2400 bauds, en FM (VHF / UHF).",
      "af": 0, "whole": True, "demod": "FM", "kind": "msg", "crc": True,
      "make": lambda fs, af, p: POCSAG(fs, compensate=p.get("_src") == "phantom")},
+]
+
+MODES += [
+    {"id": m.lower(), "label": m.replace("THROBX", "THROBX "), "family": "THROB",
+     "desc": "Paires de tonalités (G3PPT), très lent et très robuste." if m == "THROB1" else "",
+     "af": 1000, "bw": 72 if m.endswith("1") or m.endswith("2") else 140, "params": [DIR],
+     "make": (lambda m: lambda fs, af, p: Throb(fs, af, mode=m, reverse=p.get("reverse", False)))(m)}
+    for m in ("THROB1", "THROB2", "THROB4", "THROBX1", "THROBX2", "THROBX4")
+]
+
+MODES += [
+    {"id": "fsq", "label": "FSQ", "family": "MFSK", "desc": "FSQ de ZL1BPU (NVIS, messages dirigés « indicatif: »), toutes vitesses.",
+     "af": 1500, "bw": 300, "make": lambda fs, af, p: FSQ(fs, af)},
+    {"id": "ifkp", "label": "IFKP", "family": "MFSK", "desc": "IFK+ de fldigi (33 tonalités), toutes vitesses.",
+     "af": 1500, "bw": 390, "make": lambda fs, af, p: FSQ(fs, af, variant="ifkp")},
+]
+
+MODES += [
+    {"id": "ale", "label": "ALE 2G", "family": "ALE et liaisons HF", "desc": "MIL-STD-188-141 : appels, adresses, messages AMD (8 tonalités, 2 kHz).",
+     "af": 1625, "bw": 2000, "kind": "msg", "crc": True, "make": lambda fs, af, p: ALE(fs, af)},
 ]
 
 # Signaux horaires : cliquez sur la porteuse (elle tombe à 1000 Hz dans l'audio)

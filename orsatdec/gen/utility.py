@@ -414,3 +414,102 @@ def chu_encode(year, doy, h, mi, s0=30, nsec=12, fs=12000, af=2125.0, amp=0.5):
         seq.append((1, 1.0 - dur))
         allseq += seq
     return fsk(allseq, fs, af + 100, af - 100, amp)            # phase continue
+
+
+# ------------------------------------------------------------------ ALE 2G
+def ale_encode(words, fs=12000, af=1625.0, amp=0.5, gap=2.0):
+    """words : liste de (préambule, 'ABC') ; préambules : DATA 0, THRU 1, TO 2, TWAS 3, FROM 4, TIS 5, CMD 6, REP 7."""
+    from ..decoders.ale import word_bits, GRAY
+    names = {"DATA": 0, "THRU": 1, "TO": 2, "TWAS": 3, "FROM": 4, "TIS": 5, "CMD": 6, "REP": 7}
+    tone_of = {v: k for k, v in enumerate(GRAY)}
+    bits = []
+    for pre, txt in words:
+        bits += word_bits(names[pre], txt)
+    syms = [tone_of[bits[i] << 2 | bits[i + 1] << 1 | bits[i + 2]] for i in range(0, len(bits), 3)]
+    seq = [((af - 875.0 + 250.0 * k,), 0.008) for k in syms]
+    return np.concatenate([np.zeros(int(gap * fs)), tones_seq(seq, fs, amp, rise=0.0005), np.zeros(int(gap * fs))])
+
+
+def ale_call(to, tis, amd=None):
+    """Appel ALE simple : TO <adresse>, [CMD AMD + texte], TIS <adresse>."""
+    def addr(pre, a):
+        a = a.ljust((len(a) + 2) // 3 * 3, "@")
+        out = [(pre, a[:3])]
+        for i, k in enumerate(range(3, len(a), 3)):
+            out.append(("DATA" if i % 2 == 0 else "REP", a[k:k + 3]))
+        return out
+    w = addr("TO", to) * 2
+    if amd:
+        t = amd.ljust((len(amd) + 2) // 3 * 3)
+        w.append(("CMD", t[:3]))
+        for i, k in enumerate(range(3, len(t), 3)):
+            w.append(("DATA" if i % 2 == 0 else "REP", t[k:k + 3]))
+    w += addr("TIS", tis)
+    return w
+
+
+# ------------------------------------------------------------------ THROB
+def throb_encode(text, mode="THROB1", fs=12000, af=1000.0, amp=0.5, pre=4):
+    from ..decoders.throb import THROB_MODES, PAIRS, CHARS, XPAIRS, XCHARS, pulse
+    n8, freqs, pk, x = THROB_MODES[mode]
+    n = int(round(n8 * fs / 8000))
+    p = pulse(n, pk)
+    t = np.arange(n) / fs
+    syms = []
+    idle, space = 0, 1
+    for _ in range(pre):
+        syms.append(idle)
+        if x:
+            idle, space = space, idle
+    for c in text.upper():
+        if not x and c in "?@-\n":
+            syms += [5, {"?": 20, "@": 13, "-": 9, "\n": 0}[c]]
+            continue
+        if x:
+            if c == " " or c not in XCHARS:
+                syms.append(space)
+                idle, space = space, idle
+            else:
+                syms.append(XCHARS.index(c))
+        else:
+            syms.append(CHARS.index(c) if c in CHARS and c != "\0" else 44)
+    syms += [idle] * 3
+    out = []
+    for s in syms:
+        a, b = (XPAIRS if x else PAIRS)[s]
+        out.append(amp * p * (np.sin(2 * np.pi * (af + freqs[a - 1]) * t) + np.sin(2 * np.pi * (af + freqs[b - 1]) * t)) / 2)
+    return np.concatenate([np.zeros(fs // 2)] + out + [np.zeros(fs)])
+
+
+# ------------------------------------------------------------------ FSQ
+FSQ_ENC = None
+
+
+def fsq_encode(text, baud=3.0, fs=12000, af=1500.0, amp=0.5, idle=6, variant="fsq"):
+    """FSQ / IFKP : chaque quartet n fait monter la tonalité de n+1 (modulo 33)."""
+    from ..decoders.fsq import SYMLEN, VARIANTS
+    SR, _, single, double = VARIANTS[variant]
+    enc = {}
+    for i, c in enumerate(single):
+        enc.setdefault(c, (i,))
+    for p, row in enumerate(double):
+        for j, c in enumerate(row):
+            if c > 0:
+                enc.setdefault(c, (p, 29 + j))
+    symlen = (SYMLEN[baud] if variant == "fsq" else 4096 * {1: 2.0, 2: 1.0, 4: 0.5}[int(baud)]) * fs / SR
+    bw = 33 * 3 * SR / 4096
+    base = np.ceil((af - bw / 2) * 4096 / SR)
+    base -= base % 3
+    sp = enc[32][0]
+    nibs = [sp] * idle                          # espaces en préambule
+    for c in text:
+        nibs += list(enc.get(ord(c), (sp,)))
+    nibs += [sp, sp]
+    tone, ph, out = 0, 0.0, []
+    for nb in nibs:
+        tone = (tone + nb + 1) % 33
+        f = (base + 3 * tone) * SR / 4096
+        n = int(round(symlen))
+        out.append(amp * np.cos(ph + 2 * np.pi * f * np.arange(n) / fs))
+        ph = (ph + 2 * np.pi * f * n / fs) % (2 * np.pi)
+    return np.concatenate([np.zeros(fs // 2)] + out + [np.zeros(fs)])

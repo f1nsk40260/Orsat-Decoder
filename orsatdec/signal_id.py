@@ -48,6 +48,11 @@ DECODABLE = {
     2276: [("selcal", {})],
     1254: [("dcf77", {})], 7622: [("msf", {})], 1836: [("tdf", {})], 3716: [("jjy", {})], 5207: [("wwvb", {})],
     697: [("wwv", {})], 2060: [("chu", {})],
+    201: [("ale", {})],
+    3721: [("fsq", {}), ("ifkp", {})],
+    1443: [(m, {}) for m in ("throb1", "throb2", "throb4", "throbx1", "throbx2", "throbx4")],
+    140: [("psk31", {}), ("psk63", {}), ("psk125", {}), ("psk250", {}), ("psk500", {}), ("qpsk31", {}),
+          ("qpsk63", {}), ("qpsk125", {}), ("psk125r", {}), ("psk250r", {}), ("psk500r", {})],
     1981: [("ascii", {"baud": b, "shift": s, "bits": n, "reverse": r}) for b in (110.0, 75.0, 150.0, 300.0, 50.0)
            for s in (170.0, 425.0, 850.0) for n in (7, 8) for r in (False, True)],
 }
