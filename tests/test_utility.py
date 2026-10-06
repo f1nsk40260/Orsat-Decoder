@@ -48,6 +48,12 @@ def cases():
     msgs = [(1234567, 0, "0612345678", False), (2000008, 3, "Intervention VSAV rue de la Paix", True)]
     t = "POCSAG1200 1234567 f0 : 0612345678\nPOCSAG1200 2000008 f3 : Intervention VSAV rue de la Paix\n"
     out.append(("POCSAG 1200", U.pocsag_encode(msgs, 1200), lambda: make("pocsag", 0), t, 6))
+    mins = [(2026, 10, 6, 2, 14, 23), (2026, 10, 6, 2, 14, 24)]
+    for k, exp, snr in (("dcf77", "DCF77 : mardi 06/10/2026 14:23 heure d'été", 0), ("msf", "MSF : mardi 06/10/2026 14:23 GMT", 0),
+                        ("wwvb", "WWVB : 06/10/2026 14:23 UTC", 0), ("jjy", "JJY : 06/10/2026 14:23 UTC", 0),
+                        ("wwv", "WWV/WWVH : 06/10/2026 14:23 UTC", 6), ("tdf", "TDF : mardi 06/10/2026 14:24 heure d'été", 10)):
+        out.append((k.upper(), U.timecode_encode(k, mins), (lambda k: lambda: make(k, 1000))(k), exp, snr))
+    out.append(("CHU", U.chu_encode(2026, 279, 14, 23), lambda: make("chu", 0), "CHU : jour 279, 14:23", 6))
     return out
 
 

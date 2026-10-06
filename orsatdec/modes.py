@@ -22,6 +22,7 @@ from .decoders.packet import AX25
 from .decoders.tones import DTMF, Selcall, ICAOSelcal, SELCALL
 from .decoders.dsc import DSC
 from .decoders.pocsag import POCSAG
+from .decoders.timecode import TimeCode, CHU
 from .decoders.ident import Identifier, SPAN as IDENT_SPAN
 
 DIR = {"key": "reverse", "label": "Sens", "opts": [[False, "Normal"], [True, "Inversé"]], "def": False}
@@ -166,6 +167,19 @@ MODES += [
      "make": lambda fs, af, p: POCSAG(fs, compensate=p.get("_src") == "phantom")},
 ]
 
+# Signaux horaires : cliquez sur la porteuse (elle tombe à 1000 Hz dans l'audio)
+_TIME = [("dcf77", "DCF77", "77,5 kHz, Allemagne (baisses de porteuse)."), ("msf", "MSF", "60 kHz, Royaume-Uni."),
+         ("tdf", "TDF / ALS162", "162 kHz, Allouis (modulation de phase)."), ("wwvb", "WWVB", "60 kHz, États-Unis."),
+         ("jjy", "JJY", "40 et 60 kHz, Japon."), ("wwv", "WWV / WWVH", "2,5 à 20 MHz, sous-porteuse 100 Hz.")]
+MODES += [
+    {"id": k, "label": lab, "family": "Signaux horaires", "desc": d + " Cliquez sur la porteuse ; une minute pour l'heure.",
+     "af": 1000, "bw": 60, "kind": "msg", "make": (lambda k: lambda fs, af, p: TimeCode(fs, af, k))(k)}
+    for k, lab, d in _TIME
+] + [
+    {"id": "chu", "label": "CHU", "family": "Signaux horaires", "desc": "3330, 7850, 14670 kHz, Canada (FSK 300 bauds). Cliquez sur la porteuse.",
+     "af": 0, "whole": True, "carrier": True, "kind": "msg", "make": lambda fs, af, p: CHU(fs, 2125.0)},
+]
+
 BY_ID = {m["id"]: m for m in MODES}
 
 # Fréquences connues : un clic crée directement le canal (fréquence du signal, ou cadran pour FT8/FT4)
@@ -203,6 +217,13 @@ PRESETS = [
     {"label": "DSC 16804,5 kHz", "mode": "dsc", "freq": 16804500},
     {"label": "DSC VHF canal 70", "mode": "dsc_vhf", "freq": 156525000},
     {"label": "Selcal Shanwick 8879 kHz", "mode": "selcal", "freq": 8879000},
+    {"label": "DCF77 77,5 kHz", "mode": "dcf77", "freq": 77500},
+    {"label": "MSF 60 kHz", "mode": "msf", "freq": 60000},
+    {"label": "TDF 162 kHz", "mode": "tdf", "freq": 162000},
+    {"label": "WWV 10 MHz", "mode": "wwv", "freq": 10000000},
+    {"label": "WWV 15 MHz", "mode": "wwv", "freq": 15000000},
+    {"label": "CHU 7850 kHz", "mode": "chu", "freq": 7850000},
+    {"label": "CHU 3330 kHz", "mode": "chu", "freq": 3330000},
     {"label": "Selcal Shanwick 5598 kHz", "mode": "selcal", "freq": 5598000},
     {"label": "APRS HF 10147,6 kHz", "mode": "packet300", "freq": 10149300},
     {"label": "Olivia 8/250 20 m", "mode": "olivia", "freq": 14072500, "params": {"tones": 8, "bw": 250}},

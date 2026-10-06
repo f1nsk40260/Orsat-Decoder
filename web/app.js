@@ -399,6 +399,7 @@ function updateStat(c, s) {
   if (s.sync != null) parts.push(s.sync ? 'synchro <b>oui</b>' : 'synchro non');
   if (s.last != null) parts.push(`<b>${s.last}</b> décodés`);
   if (s.ready === false) parts.push('<b>décodeur absent</b>');
+  if (s.info) parts.push(esc(s.info));
   if (s.ident === 'écoute') parts.push(`écoute <b>${Math.round((s.progress || 0) * 100)} %</b>`);
   else if (s.ident === 'analyse') parts.push('<b>analyse…</b>');
   c.meters.innerHTML = parts.join(' &nbsp; ');
