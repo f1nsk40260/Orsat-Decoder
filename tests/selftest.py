@@ -103,7 +103,7 @@ def main():
     ]
     # jalon 2 : chaque banc de test fournit ses cas rapides
     import importlib
-    for name in ("test_mfsk", "test_olivia", "test_mt63"):
+    for name in ("test_mfsk", "test_olivia", "test_mt63", "test_utility"):
         try:
             cases = importlib.import_module(name).selftest_cases()
         except Exception as e:

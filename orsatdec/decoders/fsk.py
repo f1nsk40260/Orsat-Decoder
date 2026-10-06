@@ -69,8 +69,10 @@ class FSKDemod:
 class RTTY(Decoder):
     name = "RTTY"
 
-    def __init__(self, fs, af=1000.0, baud=45.45, shift=170.0, reverse=False, stop_bits=1.5, squelch=0.65, bw_factor=0.6):
+    def __init__(self, fs, af=1000.0, baud=45.45, shift=170.0, reverse=False, stop_bits=1.5, squelch=0.65, bw_factor=0.6,
+                 bits=5):
         super().__init__(fs, af)
+        self.nbits = int(bits)        # 5 : Baudot ITA2 ; 7 ou 8 : ASCII (bit de poids faible en premier)
         self.baud, self.shift = float(baud), float(shift)
         self.demod = FSKDemod(fs, af, baud, shift, reverse, bw_factor)
         self.spb = self.demod.fs2 / self.baud          # échantillons par bit (fractionnaire)
@@ -102,7 +104,7 @@ class RTTY(Decoder):
                     self.state, self.t, self.bits, self.acc, self.n = "start", 0.0, [], 0.0, 0
             else:
                 self.t += 1
-                k = len(self.bits)                        # 0 = départ, 1..5 = données, 6 = stop
+                k = len(self.bits)                        # 0 = départ, 1..n = données, n+1 = stop
                 center = (k + 0.5) * spb
                 if self.t >= center - w:
                     self.acc += v
@@ -115,13 +117,13 @@ class RTTY(Decoder):
                             self.state = "idle"
                         else:
                             self.bits.append(0)
-                    elif k <= 5:
+                    elif k <= self.nbits:
                         self.bits.append(1 if m > 0 else 0)
                     else:
                         ok = m > 0
                         self.good += 0.05 * ((1.0 if ok else 0.0) - self.good)
-                        code = sum(b << i for i, b in enumerate(self.bits[1:6]))
-                        ch = self._char(code)
+                        code = sum(b << i for i, b in enumerate(self.bits[1:1 + self.nbits]))
+                        ch = self._char(code) if self.nbits == 5 else self._ascii(code)
                         # silencieux à mémoire : sur du bruit, la moitié seulement des caractères ont un
                         # bit d'arrêt correct ; on retient les derniers et on les rend dès que c'est un signal
                         if self.good >= self.squelch:
@@ -134,6 +136,13 @@ class RTTY(Decoder):
                         self.state = "idle"
             self.prev = v
         return [{"t": "text", "text": "".join(out)}] if out else []
+
+    @staticmethod
+    def _ascii(code):
+        c = code & 0x7F
+        if c in (10, 13) or 32 <= c < 127:
+            return chr(c)
+        return ""
 
     def _char(self, code):
         if code == BAUDOT_LTRS_SHIFT:

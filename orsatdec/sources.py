@@ -152,7 +152,7 @@ class PhantomSource(Source):
     def attach(self, ch):
         super().attach(ch)
         ch.dial = ch.freq if ch.mode.get("whole") else ch.freq - ch.mode["af"]
-        a = AudioChannel(self.url, ch.dial, "USB", rx=self.rx, tap=self.tap_token(),
+        a = AudioChannel(self.url, ch.dial, ch.mode.get("demod", "USB"), rx=self.rx, tap=self.tap_token(),
                          on_pcm=ch.feed, on_state=lambda s, i=None, ch=ch: self._on_state(ch, s, i),
                          session=self.app.http, ask_pcm=self.conf.get("pcm", True))
         self.streams[ch.id] = a

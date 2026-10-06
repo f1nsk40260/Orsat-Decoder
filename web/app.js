@@ -690,7 +690,8 @@ function placeMarkers() {
   for (const c of S.chans.values()) {
     const m = S.byId[c.mode]; if (!m) continue;
     let a, b;
-    if (m.whole) { a = c.freq + 200; b = c.freq + 3000; }
+    if (m.demod === 'FM') { a = c.freq - 6000; b = c.freq + 6000; }
+    else if (m.whole) { a = c.freq + 200; b = c.freq + 3000; }
     else if (m.kind === 'ident') { a = c.freq - 50; b = c.freq + 50; }   // repère étroit : le waterfall reste cliquable
     else { a = c.freq - c.bw / 2; b = c.freq + c.bw / 2; }
     const xa = xOfFreq(a), xb = xOfFreq(b);
@@ -775,6 +776,8 @@ function initWaterfall() {
     }
     if (m.whole && S.server.shared) {
       f = S.server.basefreq;
+    } else if (m.demod === 'FM') {
+      f = Math.round(f / 500) * 500;                // FM : centre du signal
     } else if (m.whole) {
       const near = S.catalog.presets.filter(p => p.mode === m.id).map(p => p.freq).find(p => f >= p - 500 && f <= p + 3500);
       f = near ?? Math.round(f - 1500);

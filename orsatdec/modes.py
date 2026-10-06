@@ -17,6 +17,8 @@ from .decoders.mt63 import MT63
 from .decoders.wefax import WeFax
 from .decoders.sstv import SSTV
 from .decoders.hell import Hell
+from .decoders.sitora import SitorA
+from .decoders.packet import AX25
 from .decoders.ident import Identifier, SPAN as IDENT_SPAN
 
 DIR = {"key": "reverse", "label": "Sens", "opts": [[False, "Normal"], [True, "Inversé"]], "def": False}
@@ -120,6 +122,28 @@ MODES += [
      "make": lambda fs, af, p: Hell(fs, af, mode=p.get("mode", "feld"), reverse=p.get("reverse", False))},
 ]
 
+# Jalon 3 : modes utilitaires (réception seule)
+MODES += [
+    {"id": "ascii", "label": "ASCII FSK", "family": "RTTY et FSK", "desc": "Téléimprimeurs ASCII 7 ou 8 bits (agences, météo, modems).",
+     "af": 1000, "bw_from": "shift",
+     "params": [{"key": "baud", "label": "Vitesse", "opts": [[110.0, "110 bd"], [75.0, "75 bd"], [100.0, "100 bd"], [150.0, "150 bd"],
+                                                            [200.0, "200 bd"], [300.0, "300 bd"], [50.0, "50 bd"]], "def": 110.0},
+                {"key": "shift", "label": "Shift", "opts": [[170.0, "170 Hz"], [200.0, "200 Hz"], [425.0, "425 Hz"], [450.0, "450 Hz"],
+                                                           [850.0, "850 Hz"]], "def": 170.0},
+                {"key": "bits", "label": "Bits", "opts": [[7, "7"], [8, "8"]], "def": 7}, DIR],
+     "make": lambda fs, af, p: RTTY(fs, af, baud=p.get("baud", 110.0), shift=p.get("shift", 170.0), bits=p.get("bits", 7),
+                                    reverse=p.get("reverse", False))},
+    {"id": "sitora", "label": "SITOR-A / AMTOR", "family": "Maritime", "desc": "Mode ARQ (blocs de 3 caractères), en écoute ; répétitions retirées.",
+     "af": 1000, "bw": 340, "params": [DIR],
+     "make": lambda fs, af, p: SitorA(fs, af, reverse=p.get("reverse", False))},
+    {"id": "packet300", "label": "Packet 300 (HF)", "family": "Packet", "desc": "AX.25 300 bauds, 200 Hz (APRS HF, BBS).",
+     "af": 1700, "bw": 500, "kind": "msg", "crc": True,
+     "make": lambda fs, af, p: AX25(fs, af, baud=300.0, shift=200.0)},
+    {"id": "packet1200", "label": "Packet 1200 / APRS", "family": "Packet", "desc": "AX.25 1200 bauds AFSK en FM (APRS 144,800 MHz). Cliquez au centre du signal.",
+     "af": 0, "whole": True, "demod": "FM", "kind": "msg", "crc": True,
+     "make": lambda fs, af, p: AX25(fs, 1700.0, baud=1200.0, shift=1000.0)},
+]
+
 BY_ID = {m["id"]: m for m in MODES}
 
 # Fréquences connues : un clic crée directement le canal (fréquence du signal, ou cadran pour FT8/FT4)
@@ -148,6 +172,8 @@ PRESETS = [
     {"label": "SSTV 40 m", "mode": "sstv", "freq": 7165000},
     {"label": "SSTV 20 m", "mode": "sstv", "freq": 14230000},
     {"label": "Olivia 8/250 40 m", "mode": "olivia", "freq": 7072500, "params": {"tones": 8, "bw": 250}},
+    {"label": "APRS 144,800 MHz", "mode": "packet1200", "freq": 144800000},
+    {"label": "APRS HF 10147,6 kHz", "mode": "packet300", "freq": 10149300},
     {"label": "Olivia 8/250 20 m", "mode": "olivia", "freq": 14072500, "params": {"tones": 8, "bw": 250}},
     {"label": "Olivia 32/1000 20 m", "mode": "olivia", "freq": 14075400, "params": {"tones": 32, "bw": 1000}},
 ]

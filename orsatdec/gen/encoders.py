@@ -97,6 +97,22 @@ def rtty_encode(text, fs=12000, af=1000.0, baud=45.45, shift=170.0, reverse=Fals
     return fsk(seq, fs, fm, fsp, amp)
 
 
+def ascii_encode(text, fs=12000, af=1000.0, baud=110.0, shift=170.0, bits=7, stop=2.0, reverse=False, amp=0.5, idle=0.5):
+    """FSK asynchrone ASCII : 1 bit de départ, 7 ou 8 bits (poids faible en premier), 1 ou 2 bits d'arrêt."""
+    T = 1.0 / baud
+    seq = [(1, idle)]
+    for ch in text:
+        c = ord(ch) & ((1 << bits) - 1)
+        seq.append((0, T))
+        seq += [((c >> i) & 1, T) for i in range(bits)]
+        seq.append((1, stop * T))
+    seq.append((1, idle))
+    fm, fsp = af + shift / 2, af - shift / 2
+    if reverse:
+        fm, fsp = fsp, fm
+    return fsk(seq, fs, fm, fsp, amp)
+
+
 # ------------------------------------------------------------------ CW
 def cw_encode(text, fs=12000, af=700.0, wpm=20, amp=0.5, rise=0.005):
     dot = 1.2 / wpm

@@ -40,6 +40,11 @@ DECODABLE = {
     99: [("wefax", {})],
     960: [("sstv", {})],
     1309: [("hell", {})],
+    # jalon 3
+    296: [("sitora", {"reverse": r}) for r in (False, True)],
+    955: [("packet300", {})],
+    1981: [("ascii", {"baud": b, "shift": s, "bits": n, "reverse": r}) for b in (110.0, 75.0, 150.0, 300.0, 50.0)
+           for s in (170.0, 425.0, 850.0) for n in (7, 8) for r in (False, True)],
 }
 
 MOD_CLASS = {   # modulation déclarée dans la base -> grande famille
@@ -548,6 +553,8 @@ def _decode_text(x, fs, af, mode, params):
         for ev in dec.process(x[i:i + 480]):
             if ev.get("t") == "text":
                 txt.append(ev["text"])
+            elif ev.get("t") == "msg" and not ev.get("error"):
+                txt.append(ev.get("text", "") + "\n")
     return "".join(txt)
 
 
@@ -566,7 +573,8 @@ def confirm(x, fs, m, candidates, modes, tail=12.0, stop=None):
                 if mode is None or mode.get("kind") in ("img", "ident") or mode.get("whole"):
                     continue
                 t = _decode_text(xs, fs, m["fc"], mode, params)
-                sc = plausible(t)
+                # un message protégé par un CRC (packet, DSC, ALE…) est une preuve à lui seul
+                sc = 20.0 if mode.get("crc") and t.strip() else plausible(t)
                 if best is None or sc > best[3]:
                     best = (mode_id, params, t, sc)
         if best and best[3] >= 9:
