@@ -698,3 +698,52 @@ def acars_encode(blocks, fs=12000, amp=0.5, gap=0.5):
         out += [np.zeros(int(gap * fs)), amp * np.cos(ph)]
     out.append(np.zeros(int(gap * fs)))
     return np.concatenate(out)
+
+
+# ---------------------------------------------------------------------------------------------- HFDL
+def hfdl_perf_mpdu(gid, ac, flight, lat, lon, secs, freq_id=2):
+    """MPDU descendant avec un LPDU de données de performance (position de l'avion)."""
+    from ..decoders.hfdl import crc16
+
+    def fcs(b):
+        c = crc16(b)
+        return bytes(b) + bytes([c & 0xFF, c >> 8])
+    la = int(round(lat / 180.0 * 0x7FFFF)) & 0xFFFFF
+    lo = int(round(lon / 180.0 * 0x7FFFF)) & 0xFFFFF
+    p = bytearray(47)
+    p[0], p[1] = 0xFF, 0xD1
+    p[2:8] = flight.ljust(6).encode()
+    p[8], p[9], p[10] = la & 0xFF, (la >> 8) & 0xFF, ((la >> 16) & 0xF) | ((lo & 0xF) << 4)
+    p[11], p[12] = (lo >> 4) & 0xFF, (lo >> 12) & 0xFF
+    p[13], p[14] = (secs // 2) & 0xFF, (secs // 2) >> 8
+    p[15], p[16], p[17], p[18] = 1, 1, gid, freq_id
+    p[46] = 7
+    lp = fcs(bytes([0x0D]) + bytes(p))
+    hdr = bytes([0x03 | (1 << 2), gid, ac, 0, 0, 0, len(lp) - 1])
+    return fcs(hdr) + lp
+
+
+def hfdl_spdu(gid, mask):
+    from ..decoders.hfdl import crc16
+    b = bytearray(64)
+    b[0], b[1] = 0x00, 0x80 | gid
+    b[54], b[55], b[56] = (mask & 0xF) << 4, (mask >> 4) & 0xFF, (mask >> 12) & 0xFF
+    c = crc16(b)
+    return bytes(b) + bytes([c & 0xFF, c >> 8])
+
+
+def hfdl_encode(frames, fs=12000, af=1440.0, foff=7.0, amp=0.5, gap=0.6):
+    """[(PDU, M1)] -> audio USB (sous-porteuse 1440 Hz), symboles mis en forme par le filtre de dumphfdl."""
+    from scipy.signal import resample_poly
+    from ..decoders.hfdl import MF, frame_symbols
+    out = [np.zeros(int(gap * fs))]
+    for pdu, m1 in frames:
+        s = frame_symbols(pdu, m1)
+        up = np.zeros(len(s) * 3, complex)
+        up[::3] = s
+        bb = np.convolve(up, MF * 3)
+        z = resample_poly(bb, 20, 9)
+        t = np.arange(len(z)) / fs
+        out += [np.real(z * np.exp(2j * np.pi * (af + foff) * t)), np.zeros(int(gap * fs))]
+    x = np.concatenate(out)
+    return amp * x / (np.max(np.abs(x)) + 1e-12)

@@ -83,6 +83,12 @@ def cases():
     blk = U.acars_block("F-GZNA", "H1", "#M1BPOSN48123E002345,ORSAT,123456,350,TEST")
     t = A.describe(A.parse(blk[:-2])) + "\n"
     out.append(("ACARS", U.acars_encode([blk]), lambda: make("acars", 0), t, 6))
+    pdu = U.hfdl_perf_mpdu(7, 42, "AF0123", 48.8566, 2.3522, 12 * 3600 + 34 * 60 + 56)
+    t = ("Squitter Shannon, Irlande (7) · synchro UTC · fréquences actives : 11384, 8942 kHz  [300 bits/s]\n"
+         "avion 42 -> Shannon, Irlande (7) · données de performance · vol AF0123 · 48.8566° N 2.3521° E à 12:34:56 UTC"
+         " · Shannon, Irlande (7), 8942 kHz · changement de fréquence : pas de changement  [1800 bits/s]\n")
+    sig = np.concatenate([U.hfdl_encode([(U.hfdl_spdu(7, 0b101), 0), (pdu, 3)]), np.zeros(FS * 6)])
+    out.append(("HFDL", sig, lambda: make("hfdl", 1440), t, 6))
     return out
 
 

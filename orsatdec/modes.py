@@ -30,6 +30,7 @@ from .decoders.wspr import WSPR
 from .decoders.dgps import DGPS
 from .decoders.pactor import PactorI
 from .decoders.acars import ACARS
+from .decoders.hfdl import HFDL
 from .decoders.ident import Identifier, SPAN as IDENT_SPAN
 
 DIR = {"key": "reverse", "label": "Sens", "opts": [[False, "Normal"], [True, "Inversé"]], "def": False}
@@ -190,6 +191,9 @@ MODES += [
     {"id": "acars", "label": "ACARS", "family": "Aviation", "desc": "Messages des avions en VHF (131,725 / 131,525 MHz en Europe), AM, MSK 2400 bits/s. Cliquez au centre du canal.",
      "af": 0, "whole": True, "demod": "AM", "kind": "msg", "crc": True,
      "make": lambda fs, af, p: ACARS(fs)},
+    {"id": "hfdl", "label": "HFDL", "family": "Aviation", "desc": "Liaison de données HF des avions (positions, ACARS, squitters des 16 stations au sol), PSK 1800 bauds. Cliquez au centre du signal (porteuse + 1440 Hz).",
+     "af": 1440, "bw": 2400, "kind": "msg", "crc": True,
+     "make": lambda fs, af, p: HFDL(fs, af)},
     {"id": "selcal", "label": "Selcal (aviation)", "family": "Sélectifs", "desc": "Appel sélectif OACI des avions en HF (AB-CD). Cliquez sur la porteuse.",
      "af": 0, "whole": True, "carrier": True, "kind": "msg",
      "make": lambda fs, af, p: ICAOSelcal(fs)},
@@ -273,6 +277,13 @@ PRESETS = [
     {"label": "SSTV 20 m", "mode": "sstv", "freq": 14230000},
     {"label": "Olivia 8/250 40 m", "mode": "olivia", "freq": 7072500, "params": {"tones": 8, "bw": 250}},
     {"label": "APRS 144,800 MHz", "mode": "packet1200", "freq": 144800000},
+    {"label": "HFDL Shannon 5547 kHz", "mode": "hfdl", "freq": 5548440},
+    {"label": "HFDL Shannon 6532 kHz", "mode": "hfdl", "freq": 6533440},
+    {"label": "HFDL Shannon 8942 kHz", "mode": "hfdl", "freq": 8943440},
+    {"label": "HFDL Shannon 11384 kHz", "mode": "hfdl", "freq": 11385440},
+    {"label": "HFDL Canaries 8948 kHz", "mode": "hfdl", "freq": 8949440},
+    {"label": "HFDL Canaries 13303 kHz", "mode": "hfdl", "freq": 13304440},
+    {"label": "HFDL Reykjavik 8977 kHz", "mode": "hfdl", "freq": 8978440},
     {"label": "ACARS Europe 131,725 MHz", "mode": "acars", "freq": 131725000},
     {"label": "ACARS Europe 131,525 MHz", "mode": "acars", "freq": 131525000},
     {"label": "ACARS États-Unis 131,550 MHz", "mode": "acars", "freq": 131550000},
