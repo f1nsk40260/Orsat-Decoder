@@ -54,7 +54,7 @@ if [ "$(cd "$APPDIR" && pwd -P)" != "$(cd "$HERE" && pwd -P)" ]; then
     rm -rf "$APPDIR/$d"
     mv "$APPDIR/$d.new" "$APPDIR/$d"
   done
-  for f in install.sh get.sh uninstall.sh LISEZ-MOI.md .gitignore; do
+  for f in install.sh get.sh uninstall.sh README.md .gitignore; do
     [ -f "$HERE/$f" ] && cp "$HERE/$f" "$APPDIR/$f"
   done
 fi
