@@ -56,6 +56,21 @@ if os.environ.get("FAKE_TCI_SET") == "ident":
                                              np.zeros(FS * 2)])),
     ]
     DIAL0 = 10_100_000
+elif os.environ.get("FAKE_TCI_SET") == "hfdl":
+    # cadran 8942 kHz (HFDL Shannon) : squitter et positions de trois vols, deux fois chacun
+    from orsatdec.gen import utility as U
+
+    def _hfdl():
+        fr = [(U.hfdl_spdu(7, 0b101), 0)]
+        vols = [(31, "AF0123", (48.9, -12.0), (49.4, -15.5)), (44, "BA0178", (53.1, -20.0), (53.6, -24.0)),
+                (52, "DL0045", (46.0, -30.0), (46.8, -26.5))]
+        for k in range(2):
+            for ac, vol, a, b in vols:
+                lat, lon = (a, b)[k]
+                fr.append((U.hfdl_perf_mpdu(7, ac, vol, lat, lon, 12 * 3600 + 600 * k + ac), 2))
+        return U.hfdl_encode(fr, af=AF0, foff=0.0, gap=0.4)
+    STATIONS = [(8_943_440, _hfdl)]
+    DIAL0 = 8_942_000
 else:
     DIAL0 = 7_069_000
 

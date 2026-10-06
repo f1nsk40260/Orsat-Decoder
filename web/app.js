@@ -272,7 +272,10 @@ function buildCard(c) {
   const pause = el('button', { class: 'icon-btn small', type: 'button', title: 'Pause' });
   pause.onclick = () => send({ t: 'pause', ch: c.id, paused: !c.paused });
   const clear = el('button', { class: 'icon-btn small', type: 'button', title: 'Effacer le texte', text: 'Effacer' });
-  clear.onclick = () => { c.out.replaceChildren(); c.cur = null; c.table = null; c.pic = null; };
+  clear.onclick = () => {
+    c.out.replaceChildren(); c.cur = null; c.table = null; c.pic = null;
+    if (c.mapData) { c.mapData = null; c.mapLayer?.clearLayers(); if (c.mapBtn) c.mapBtn.textContent = 'Carte'; }
+  };
   const isImg = m.kind === 'img', isIdent = m.kind === 'ident';
   if (isImg) clear.title = 'Effacer les images';
   if (isIdent) {                                   // « Relancer » : nouvelle écoute au même endroit
@@ -283,6 +286,9 @@ function buildCard(c) {
     title: isImg ? 'Télécharger la dernière image (PNG)' : 'Enregistrer le texte' });
   save.onclick = () => isImg ? saveImage(c) : saveText(c);
   if (isIdent) save.hidden = true;
+  const hasMap = m.id === 'hfdl';
+  const mapBtn = hasMap ? el('button', { class: 'icon-btn small', type: 'button', title: 'Carte des avions et des stations au sol', text: 'Carte' }) : null;
+  if (mapBtn) mapBtn.onclick = () => toggleMap(c);
   const close = el('button', { class: 'icon-btn small', type: 'button', title: 'Fermer le canal', text: '✕' });
   close.onclick = () => send({ t: 'remove', ch: c.id });
   const meters = el('div', { class: 'meters' });
@@ -299,9 +305,10 @@ function buildCard(c) {
   const specWrap = el('div', { class: 'spec-wrap' }, spec, el('div', { class: 'spec-read' }));
   const card = el('article', { class: 'chan', style: `--c:${c.color}` },
     el('header', {}, el('span', { class: 'mname', text: m.label }), freq, el('span', { class: 'unit' }),
-      el('span', { class: 'state' }), el('div', { class: 'tools' }, listen, pause, clear, save, close)),
-    el('div', { class: 'sub' }, params, meters), specWrap, out);
+      el('span', { class: 'state' }), el('div', { class: 'tools' }, listen, pause, mapBtn, clear, save, close)),
+    el('div', { class: 'sub' }, params, meters), specWrap, hasMap ? el('div', { class: 'map', hidden: true }) : null, out);
   Object.assign(c, { card, out, freqIn: freq, meters, pauseBtn: pause, listenBtn: listen, stateEl: card.querySelector('.state'),
+    mapEl: card.querySelector('.map'), mapBtn,
     spec, specRead: specWrap.querySelector('.spec-read') });
   card.addEventListener('mousedown', () => setActive(c.id));
   spec.addEventListener('click', e => {
@@ -477,10 +484,78 @@ function writeMsg(c, m) {
     el('td', { class: 'n', text: m.dt != null ? m.dt.toFixed(1) : '' }), el('td', { class: 'n', text: m.freq ?? '' }),
     el('td', { class: 'm', text: m.text }));
   c.lastSlot = m.utc;
+  if (m.pos || m.gs) mapUpdate(c, m);
   c.table.append(tr);
   while (c.table.rows.length > 1500) c.table.deleteRow(0);
   if (atBottom) out.scrollTop = out.scrollHeight;
 }
+// ------------------------------------------------------------------ carte (HFDL)
+const PLANE_SVG = '<svg viewBox="0 0 24 24" width="22" height="22"><path d="M12 2c.8 0 1.4.7 1.4 1.6v5.6l7.6 4.6v2l-7.6-2.4v4.4l2.2 1.7v1.5L12 20l-3.6 1v-1.5l2.2-1.7v-4.4L3 15.8v-2l7.6-4.6V3.6C10.6 2.7 11.2 2 12 2z"/></svg>';
+function bearing(a, b) {
+  const r = Math.PI / 180, y = Math.sin((b.lon - a.lon) * r) * Math.cos(b.lat * r);
+  const x = Math.cos(a.lat * r) * Math.sin(b.lat * r) - Math.sin(a.lat * r) * Math.cos(b.lat * r) * Math.cos((b.lon - a.lon) * r);
+  return (Math.atan2(y, x) / r + 360) % 360;
+}
+function mapUpdate(c, m) {
+  const d = (c.mapData ||= { planes: new Map(), gs: new Map() });
+  for (const g of m.gs || []) d.gs.set(g.id, g);
+  for (const p of m.pos || []) {
+    const key = p.flight || p.ac || `${p.lat},${p.lon}`;
+    const pl = d.planes.get(key) || { key, track: [] };
+    const last = pl.track[pl.track.length - 1];
+    if (!last || last.lat !== p.lat || last.lon !== p.lon) pl.track.push({ lat: p.lat, lon: p.lon });
+    if (pl.track.length > 50) pl.track.shift();
+    Object.assign(pl, p, { seen: m.utc });
+    d.planes.set(key, pl);
+  }
+  if (c.map) mapDraw(c);
+  if (c.mapBtn && d.planes.size) c.mapBtn.textContent = `Carte (${d.planes.size})`;
+}
+function toggleMap(c) {
+  const div = c.mapEl;
+  div.hidden = !div.hidden;
+  c.card.classList.toggle('wide', !div.hidden);       // carte : la carte du canal prend toute la largeur
+  if (div.hidden) return;
+  if (!window.L) { div.textContent = 'Bibliothèque de carte absente (web/vendor/leaflet).'; return; }
+  if (!c.map) {
+    c.map = L.map(div, { worldCopyJump: true, minZoom: 1 }).setView([40, 0], 2);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      subdomains: 'abcd', maxZoom: 12,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
+    }).addTo(c.map);
+    c.mapLayer = L.layerGroup().addTo(c.map);
+    c.mapFitted = false;
+  }
+  setTimeout(() => { c.map.invalidateSize(); c.mapFitted = false; mapDraw(c); }, 50);
+}
+function mapDraw(c) {
+  const d = c.mapData; if (!d || !c.map) return;
+  const lay = c.mapLayer; lay.clearLayers();
+  const pts = [];
+  for (const g of d.gs.values()) {
+    L.circleMarker([g.lat, g.lon], { radius: 7, color: '#C9A24A', weight: 2, fillColor: '#C9A24A', fillOpacity: 0.35 })
+      .bindTooltip(`Station HFDL : ${g.name}`, { direction: 'top' }).addTo(lay);
+    pts.push([g.lat, g.lon]);
+  }
+  for (const p of d.planes.values()) {
+    if (p.track.length > 1) L.polyline(p.track.map(t => [t.lat, t.lon]), { color: '#39FF14', weight: 2, opacity: 0.6 }).addTo(lay);
+    const n = p.track.length, hdg = n > 1 ? bearing(p.track[n - 2], p.track[n - 1]) : 0;
+    const icon = L.divIcon({ className: 'plane-ico', iconSize: [22, 22], iconAnchor: [11, 11],
+      html: `<div style="transform:rotate(${hdg}deg)">${PLANE_SVG}</div>` });
+    const t = p.seen ? `${p.seen.slice(0, 2)}:${p.seen.slice(2, 4)}` : '';
+    L.marker([p.lat, p.lon], { icon })
+      .bindTooltip(p.flight || p.ac || '?', { permanent: true, direction: 'right', offset: [10, 0], className: 'plane-lbl' })
+      .bindPopup(`<b>${p.flight || '?'}</b>${p.ac ? ' · ' + p.ac : ''}<br>${p.lat.toFixed(3)}°, ${p.lon.toFixed(3)}°<br>`
+        + `position de ${p.time} UTC, reçue à ${t} UTC` + (n > 1 ? `<br>${n} positions` : ''))
+      .addTo(lay);
+    pts.push([p.lat, p.lon]);
+  }
+  if (!c.mapFitted && pts.length) {
+    c.map.fitBounds(L.latLngBounds(pts).pad(0.3), { maxZoom: 5 });
+    c.mapFitted = d.planes.size > 0;
+  }
+}
+
 // ------------------------------------------------------------------ identification
 const WHY = { empreinte: 'empreinte', largeur: 'largeur', modulation: 'modulation', 'fréquence': 'fréquence', ACF: 'ACF' };
 function fmtMeasure(m) {

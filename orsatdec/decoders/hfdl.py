@@ -205,8 +205,10 @@ def coord(c):
     return c * 180.0 / 0x7FFFF
 
 
-def station(gid):
+def station(gid, ctx=None):
     s = STATIONS.get(gid)
+    if ctx is not None and s:
+        ctx.gs.add(gid)
     return f"{s[0]} ({gid})" if s else f"station {gid}"
 
 
@@ -223,7 +225,7 @@ def _latlon(lat, lon):
     return f"{abs(lat):.4f}° {'N' if lat >= 0 else 'S'} {abs(lon):.4f}° {'E' if lon >= 0 else 'O'}"
 
 
-def spdu(buf):
+def spdu(buf, ctx=None):
     if not fcs_ok(buf, 64):
         return None
     gid = buf[1] & 0x7F
@@ -231,7 +233,7 @@ def spdu(buf):
     gs = [(gid, bool(buf[1] & 0x80), buf[54] >> 4 | buf[55] << 4 | buf[56] << 12),
           (buf[57] & 0x7F, bool(buf[57] & 0x80), buf[58] | buf[59] << 8 | (buf[60] & 0xF) << 16),
           (buf[60] >> 4 | (buf[61] & 0x7) << 4, bool(buf[61] & 0x8), buf[61] >> 4 | buf[62] << 4 | buf[63] << 12)]
-    s = f"Squitter {station(gid)}"
+    s = f"Squitter {station(gid, ctx)}"
     s += " · " + ("synchro UTC" if gs[0][1] else "sans synchro UTC")
     if note:
         s += " · " + ("", "canal arrêté", "changement de fréquence prochain", "STATION ARRÊTÉE")[note]
@@ -243,15 +245,26 @@ def spdu(buf):
 
 
 class AircraftCache:
+    """Identités des avions connectés (ICAO) et, pour la trame en cours, positions et stations vues."""
+
     def __init__(self):
         self.ids = {}
+        self.gid = 0
+        self.cur = ""
+        self.pos = []
+        self.gs = set()
+
+    def position(self, lat, lon, flight, tt):
+        if -90 <= lat <= 90 and -180 <= lon <= 180 and (abs(lat) > 0.01 or abs(lon) > 0.01):
+            self.pos.append({"lat": round(lat, 5), "lon": round(lon, 5), "flight": flight, "ac": self.cur,
+                             "time": f"{tt // 3600:02d}:{tt % 3600 // 60:02d}:{tt % 60:02d}"})
 
     def name(self, gid, ac):
         ic = self.ids.get((gid, ac))
         return f"avion {ac}" + (f" (ICAO {ic:06X})" if ic is not None else "")
 
 
-def hfnpdu(buf, up):
+def hfnpdu(buf, up, ctx=None):
     if len(buf) < 2 or buf[0] != 0xFF:
         return "données " + buf.hex() if buf else ""
     t = buf[1]
@@ -261,6 +274,8 @@ def hfnpdu(buf, up):
         lon = coord((buf[10] & 0xF0) >> 4 | buf[11] << 4 | buf[12] << 12)
         tt = 2 * (buf[13] | buf[14] << 8)
         gid = buf[17] & 0x7F
+        if ctx is not None:
+            ctx.position(lat, lon, fid, tt)
         return (f"données de performance · vol {fid} · {_latlon(lat, lon)} à {tt // 3600:02d}:{tt % 3600 // 60:02d}:"
                 f"{tt % 60:02d} UTC · {station(gid)}, {freqs(gid, 1 << buf[18])}"
                 f" · changement de fréquence : {FREQ_CHANGE.get(buf[46] & 0xF, '?')}")
@@ -269,6 +284,8 @@ def hfnpdu(buf, up):
         lat = coord(buf[8] | buf[9] << 8 | (buf[10] & 0xF) << 16)
         lon = coord((buf[10] & 0xF0) >> 4 | buf[11] << 4 | buf[12] << 12)
         tt = 2 * (buf[13] | buf[14] << 8)
+        if ctx is not None:
+            ctx.position(lat, lon, fid, tt)
         props = []
         for p in range(15, len(buf) - 5, 6):
             g = buf[p] & 0x7F
@@ -305,7 +322,7 @@ def lpdu(buf, up, ctx):
     t = b[0]
     name = LPDU_TYPES.get(t, f"LPDU 0x{t:02X}")
     if t in (0x0D, 0x1D):
-        return hfnpdu(b[1:], up)
+        return hfnpdu(b[1:], up, ctx)
     if t in (0x9F, 0x5F) and len(b) >= 5:
         ic, ac = icao(b[1:4]), b[4]
         ctx.ids[(ctx.gid, ac)] = ic
@@ -326,7 +343,8 @@ def mpdu(buf, ctx):
             return None
         gid, ac = buf[1] & 0x7F, buf[2]
         ctx.gid = gid
-        head = f"{ctx.name(gid, ac)} -> {station(gid)}"
+        ctx.cur = ctx.name(gid, ac)
+        head = f"{ctx.cur} -> {station(gid, ctx)}"
         sizes = [buf[6 + j] + 1 for j in range(n)]
         groups = [(head, sizes)]
         up = False
@@ -344,7 +362,7 @@ def mpdu(buf, ctx):
             return None
         gid = buf[1] & 0x7F
         ctx.gid = gid
-        groups = [(f"{station(gid)} -> {ctx.name(gid, ac)}", sizes) for ac, sizes in hdr]
+        groups = [(f"{station(gid, ctx)} -> {ctx.name(gid, ac)}", sizes) for ac, sizes in hdr]
         up = True
     out = []
     p = h + 2
@@ -480,7 +498,7 @@ def decode_pdu(buf, ctx):
         return None
     if buf[0] & 1:
         return mpdu(buf, ctx)
-    r = spdu(buf)
+    r = spdu(buf, ctx)
     return [r] if r else None
 
 
@@ -596,6 +614,7 @@ class HFDL(Decoder):
         if r is None:
             return None
         m1, data, terr, nsym = r
+        self.ctx.pos, self.ctx.gs, self.ctx.cur = [], set(), ""
         try:
             buf = decode_bits(m1, data)
             lines = decode_pdu(buf, self.ctx)
@@ -611,6 +630,10 @@ class HFDL(Decoder):
                 self.count += 1
                 out.append({"t": "msg", "mode": "HFDL", "utc": utc, "freq": int(round(self.af + fine)),
                             "text": f"{ln}  [{bps} bits/s]"})
+            # pour la carte : positions d'avions et stations au sol de la trame
+            out[-1]["pos"] = self.ctx.pos
+            out[-1]["gs"] = [{"id": g, "name": STATIONS[g][0], "lat": STATIONS[g][1], "lon": STATIONS[g][2]}
+                             for g in sorted(self.ctx.gs)]
         return (nsym + 10) * 3
 
 

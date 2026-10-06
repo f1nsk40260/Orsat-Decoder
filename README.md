@@ -72,7 +72,7 @@ L'installateur :
 | Maritime | Navtex / SITOR-B, SITOR-A (AMTOR ARQ), DSC/ASN HF-MF et VHF, DGPS (corrections GPS RTCM) | Navtex −8 dB, DSC −3 dB |
 | TOR / ARQ | PACTOR I en écoute (ARQ et FEC, 100/200 bauds, Memory-ARQ, Huffman) | ≈ 0 dB |
 | Packet | AX.25 300 bauds (HF) et 1200 bauds (APRS en FM), positions APRS | 300 bauds ≈ +3 dB |
-| Aviation | HFDL (positions des avions, ACARS, squitters des 16 stations au sol), ACARS VHF, Selcal OACI | |
+| Aviation | HFDL (positions des avions sur une carte, ACARS, squitters des 16 stations au sol), ACARS VHF, Selcal OACI | |
 | Appels sélectifs | DTMF, 5 tons (CCIR, EEA, ZVEI…), selcall CCIR 493-4, POCSAG 512/1200/2400 | |
 | ALE | ALE 2G (MIL-STD-188-141) | ≈ −3 dB |
 | Signaux horaires | DCF77, MSF, TDF, WWVB, JJY, WWV/WWVH, CHU | |
@@ -86,6 +86,10 @@ décodeur ne doit rien imprimer : la squelch s'appuie sur le code correcteur de 
 contrepartie, un canal MFSK/THOR qu'on vient d'ouvrir reste muet quelques secondes (7 s en MFSK16),
 le temps de remplir son désentrelaceur, et MT63 affiche le texte avec une dizaine de secondes de
 retard. FT8, FT4, WSPR, JT65, JT9 et JS8 décodent toute la bande audio à la fin de chaque créneau UTC.
+
+**Carte HFDL** : le bouton **Carte** d'un canal HFDL affiche les avions dont une position a été reçue
+(indicatif du vol, trace, heure), et les stations au sol entendues. Le fond de carte (OpenStreetMap /
+CARTO) demande une connexion Internet.
 
 **Images** : elles s'affichent dans la carte du canal au fil de la réception. Le fax démarre seul sur
 la tonalité de départ et se cale sur les lignes de phasage. Le SSTV démarre sur le code VIS. Chaque
@@ -205,6 +209,7 @@ Orsat-Decoder s'appuie sur le travail de nombreux auteurs de logiciels libres :
 | [fldigi](http://www.w1hkj.com/) (W1HKJ) | référence des modes MFSK, Olivia, MT63, THROB, FSQ, PSK-R | GPL-3 |
 | LinuxALE | conventions du codage Golay et de l'entrelacement ALE 2G | GPL |
 | [Artemis](https://github.com/AresValley/Artemis) / sigidwiki.com | base d'identification des signaux | GPL-3 |
+| [Leaflet](https://leafletjs.com/) | carte HFDL, embarqué dans `web/vendor` | BSD-2 |
 
 ## Pour le développement
 
