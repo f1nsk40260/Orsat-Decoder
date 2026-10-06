@@ -57,6 +57,20 @@ def check_ft8():
     return ok and ok2
 
 
+def check_wspr():
+    """WSPR : deux balises à -24 dB dans un créneau de 2 minutes, décodées par wsprd (native/)."""
+    if not (ROOT / "native" / "bin" / "wspr_decode_iq").exists():
+        print("  ÉCHEC  WSPR       décodeur natif absent (native/build.sh)")
+        return False
+    from orsatdec.gen.utility import wspr_encode
+    from orsatdec.decoders.wspr import to_iq, decode_iq
+    x = add_noise(wspr_encode([("F1NSK JN03 30", -20, 1.0), ("K1JT FN20 37", 45, 1.0)]), -24, FS, seed=3)
+    got = {m["call"] for m in decode_iq(to_iq(x, FS))}
+    ok = {"F1NSK", "K1JT"} <= got
+    print(f"  {'OK ' if ok else 'ÉCHEC'}  WSPR        -24 dB   {len(got)} balise(s) décodée(s)")
+    return ok
+
+
 def check_flac():
     """Chaîne FLAC des serveurs PhantomSDR-Plus : encodage en blocs de 256, décodage en continu."""
     try:
@@ -99,6 +113,7 @@ def main():
         check("CW", cw_encode(m1, fs=FS, af=700, wpm=20), CW(FS, 700), m1, 0),
         check("Navtex", sitorb_encode(nav, fs=FS, af=1000), SitorB(FS, 1000), nav, 0),
         check_ft8(),
+        check_wspr(),
         check_flac(),
     ]
     # jalon 2 : chaque banc de test fournit ses cas rapides

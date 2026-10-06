@@ -513,3 +513,26 @@ def fsq_encode(text, baud=3.0, fs=12000, af=1500.0, amp=0.5, idle=6, variant="fs
         out.append(amp * np.cos(ph + 2 * np.pi * f * np.arange(n) / fs))
         ph = (ph + 2 * np.pi * f * n / fs) % (2 * np.pi)
     return np.concatenate([np.zeros(fs // 2)] + out + [np.zeros(fs)])
+
+
+# ------------------------------------------------------------------ WSPR
+def wspr_encode(stations, fs=12000, amp=0.5):
+    """stations : liste de ('INDICATIF LOC PWR', décalage audio Hz par rapport à 1500, amplitude relative).
+    Renvoie 120 s d'audio : émission de 162 symboles de 8192/12000 s commençant à +1 s."""
+    import subprocess
+    from pathlib import Path
+    binary = Path(__file__).resolve().parents[2] / "native" / "bin" / "wspr_decode_iq"
+    n = int(120 * fs)
+    out = np.zeros(n)
+    spt = 8192 / 12000
+    for msg, off, a in stations:
+        syms = subprocess.run([str(binary), "-e", msg], capture_output=True, text=True).stdout.strip()
+        ph = 0.0
+        pos = int(1.0 * fs)
+        for k, c in enumerate(syms):
+            f = 1500.0 + off + (int(c) - 1.5) * 12000 / 8192
+            m = int(round((k + 1) * spt * fs)) - int(round(k * spt * fs))
+            out[pos:pos + m] += amp * a * np.cos(ph + 2 * np.pi * f * np.arange(m) / fs)
+            ph = (ph + 2 * np.pi * f * m / fs) % (2 * np.pi)
+            pos += m
+    return out

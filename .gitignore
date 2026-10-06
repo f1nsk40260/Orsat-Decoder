@@ -11,3 +11,4 @@ config.json
 *.tmp
 *.log
 browser-profile/
+native/wspr/wspr_decode_iq

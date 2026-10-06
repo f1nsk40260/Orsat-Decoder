@@ -26,6 +26,7 @@ from .decoders.timecode import TimeCode, CHU
 from .decoders.ale import ALE
 from .decoders.throb import Throb
 from .decoders.fsq import FSQ
+from .decoders.wspr import WSPR
 from .decoders.ident import Identifier, SPAN as IDENT_SPAN
 
 DIR = {"key": "reverse", "label": "Sens", "opts": [[False, "Normal"], [True, "Inversé"]], "def": False}
@@ -76,6 +77,8 @@ MODES = [
      "af": 0, "whole": True, "kind": "msg", "make": lambda fs, af, p: FT8(fs, 1500)},
     {"id": "ft4", "label": "FT4", "family": "Signaux faibles", "desc": "Créneaux de 7,5 s.",
      "af": 0, "whole": True, "kind": "msg", "make": lambda fs, af, p: FT8(fs, 1500, ft4=True)},
+    {"id": "wspr", "label": "WSPR", "family": "Signaux faibles", "desc": "Balises de propagation, créneaux de 2 min (minutes paires).",
+     "af": 0, "whole": True, "kind": "msg", "make": lambda fs, af, p: WSPR(fs)},
 ]
 
 
@@ -239,6 +242,12 @@ PRESETS = [
     {"label": "FT8 15 m", "mode": "ft8", "freq": 21074000},
     {"label": "FT8 10 m", "mode": "ft8", "freq": 28074000},
     {"label": "FT4 20 m", "mode": "ft4", "freq": 14080000},
+    {"label": "WSPR 80 m", "mode": "wspr", "freq": 3568600},
+    {"label": "WSPR 40 m", "mode": "wspr", "freq": 7038600},
+    {"label": "WSPR 30 m", "mode": "wspr", "freq": 10138700},
+    {"label": "WSPR 20 m", "mode": "wspr", "freq": 14095600},
+    {"label": "WSPR 17 m", "mode": "wspr", "freq": 18104600},
+    {"label": "WSPR 10 m", "mode": "wspr", "freq": 28124600},
     {"label": "PSK31 40 m", "mode": "psk31", "freq": 7071000},
     {"label": "PSK31 20 m", "mode": "psk31", "freq": 14071000},
     {"label": "Fax DWD 3855 kHz", "mode": "wefax", "freq": 3855000},
