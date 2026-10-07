@@ -28,6 +28,7 @@ class ImageStore:
         self.folder = folder
         self.label = label          # fonction () -> "sstv-14230kHz" pour le nom de fichier
         self.cur = None             # {"w","h","fmt","title","tape","buf","rows"}
+        self.last = None            # dernière image enregistrée (pour un recalage après coup)
 
     def handle(self, ev):
         """Met à jour l'état ; renvoie un éventuel événement supplémentaire (image enregistrée)."""
@@ -37,6 +38,8 @@ class ImageStore:
             self.cur = {k: ev.get(k) for k in ("w", "h", "fmt", "title", "tape")}
             self.cur.update(buf=bytearray(), rows=0, t0=time.time())
         elif self.cur is None:
+            if op == "rows" and ev.get("fix") and self.last:
+                self._fix(ev)
             return None
         elif op == "rows":
             c = self.cur
@@ -47,7 +50,7 @@ class ImageStore:
             if len(c["buf"]) < a + len(data):
                 c["buf"].extend(bytes(a + len(data) - len(c["buf"])))
             c["buf"][a:a + len(data)] = data
-            c["rows"] = max(c["rows"], ev["y"] + ev["n"])
+            c["rows"] = ev["total"] if ev.get("total") is not None else max(c["rows"], ev["y"] + ev["n"])
         elif op == "cols":
             c = self.cur
             c["buf"] += base64.b64decode(ev["data"])
@@ -73,11 +76,25 @@ class ImageStore:
             name = time.strftime("%Y-%m-%d_%H%M", time.localtime(c["t0"])) + f"_{self.label()}.png"
             path = self.folder / name
             path.write_bytes(png_bytes(c["w"], h, data, rgb))
+            self.last = {"w": c["w"], "rgb": rgb, "path": path}
             return path
         except OSError:
             return None
         finally:
             c["rows"] = 0
+
+    def _fix(self, ev):
+        """Image recalée après sa fin : le fichier PNG est réécrit."""
+        L = self.last
+        data = base64.b64decode(ev["data"])
+        line = L["w"] * (3 if L["rgb"] else 1)
+        if ev.get("y") or len(data) < line:
+            return
+        h = len(data) // line
+        try:
+            L["path"].write_bytes(png_bytes(L["w"], h, data[:h * line], L["rgb"]))
+        except OSError:
+            pass
 
     def replay(self):
         """Événements qui redessinent l'image courante pour une interface qui arrive."""

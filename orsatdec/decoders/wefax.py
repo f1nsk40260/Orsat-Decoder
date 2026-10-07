@@ -12,7 +12,9 @@ Automatisme (norme OMM) :
 Si le départ a été manqué (canal ouvert en cours d'émission), l'image démarre « en roue libre » dès
 qu'un signal de fac-similé est reconnu (forte corrélation d'une ligne à l'autre) ; la pente est ensuite
 estimée sur l'image elle-même et le début de ligne est calé sur la marge ou le cadre de la carte :
-l'image déjà reçue est alors recalculée et renvoyée.
+l'image déjà reçue est alors recalculée et renvoyée. Le calage sur la marge est revérifié à 160 et
+400 lignes puis en fin d'image (les premières lignes, souvent un bandeau de titre, peuvent tromper) ;
+l'opérateur peut aussi recaler l'image à la main (shift_x : clic sur le vrai bord gauche).
 En réception, la pente reste suivie en continu par corrélation entre lignes distantes de 16 lignes.
 """
 import base64
@@ -177,6 +179,7 @@ class WeFax(Decoder):
         self.aligned = False
         self.slant_at = 0
         self.flush_count = 0
+        self.manual = False                  # recalage manuel fait : plus de recalage automatique
         self.ev = []
 
     # ---------------------------------------------------------------- utilitaires
@@ -467,6 +470,8 @@ class WeFax(Decoder):
         self.rows = []
         self.pending = []
         self.slant_at = 32 if not free else 48
+        self.manual = False
+        self.recheck = [160, 400] if free else []
         self.T_ref = self.T
         self.start_v0 = self.v0
         title = f"Fac-similé IOC {self.ioc}, {self.lpm:.0f} l/min" + (" (roue libre)" if free else "")
@@ -491,6 +496,9 @@ class WeFax(Decoder):
             if len(self.rows) >= self.slant_at:
                 self._slant()
                 self.slant_at = len(self.rows) + 16
+            if self.recheck and len(self.rows) >= self.recheck[0] and self.aligned:
+                self.recheck.pop(0)
+                self._recheck_margin()
             if len(self.rows) >= self.max_lines:
                 self._end("longueur maximale")
 
@@ -620,6 +628,47 @@ class WeFax(Decoder):
             return (i + w / 2) % W
         return None
 
+    def _recheck_margin(self):
+        """Roue libre : nouveau calage du début de ligne sur la marge, avec toutes les lignes reçues."""
+        if self.manual or not self.free or len(self.rows) < 64:
+            return
+        rows = np.asarray(self.rows, np.float64) / 255
+        sd = rows.std(axis=0)
+        h = max(2, int(0.015 * self.W))
+        if np.concatenate([sd[-h:], sd[:h]]).mean() < 0.25 * np.median(sd):
+            return                               # le début de ligne est déjà dans une marge calme
+        x0 = self._find_margin(rows)
+        if x0 is None or min(x0, self.W - x0) < 0.01 * self.W:
+            return
+        self.ev += self._shift(x0)
+
+    def shift_x(self, x):
+        """Recalage manuel : la colonne x (pixels de l'image) devient le bord gauche.
+        Appelé par l'interface, dans le fil du décodeur ; renvoie les événements à diffuser."""
+        if self.state == "image" and not self.aligned:
+            return []
+        self.manual = True
+        return self._shift(x)
+
+    def _shift(self, x):
+        W = self.W
+        dx = int(round(x)) % W
+        n = len(self.rows)
+        if dx == 0 or n < 2:
+            return []
+        flat = np.concatenate(self.rows)[dx:dx + (n - 1) * W]
+        self.rows = [flat[i * W:(i + 1) * W].copy() for i in range(n - 1)]
+        live = self.state == "image"
+        if live:
+            self.t0 += dx / W * self.T
+            self.k -= 1                          # la dernière ligne, incomplète, sera relue
+        self.pending = []
+        data = np.concatenate(self.rows)
+        ev = {"t": "img", "op": "rows", "y": 0, "n": len(self.rows), "total": len(self.rows), "data": b64(data)}
+        if not live:
+            ev["fix"] = True                     # image déjà terminée : le PNG enregistré est réécrit
+        return [ev]
+
     def _flush(self):
         self.flush_count = 0
         if not self.pending:
@@ -641,6 +690,8 @@ class WeFax(Decoder):
         if self.state == "image":
             if self.free and not self.aligned and self.rows:
                 self._free_align()
+            if self.free and self.aligned and len(self.rows) >= 120:
+                self._recheck_margin()
             self._flush()
             self.ev.append({"t": "img", "op": "end"})
         self.state = "idle"

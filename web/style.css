@@ -332,3 +332,10 @@ dialog code { color: var(--text); }
 
 dialog .hint.bad { color: var(--bad); }
 #srvDialog { width: min(560px, 94vw); }
+
+/* ---------- fax météo : grande fenêtre, redimensionnable ---------- */
+.chan.imgcard { grid-column: 1 / -1; height: 82vh; min-height: 360px; resize: vertical; }
+.chan:fullscreen { height: 100vh; border-radius: 0; resize: none; background: #141E28; }
+.chan .out.img.native { overflow-x: auto; }
+.chan .out.img.native .pic canvas { width: auto; max-width: none; }
+.chan.aligning .pic:last-child canvas { cursor: col-resize; outline: 2px dashed var(--c); outline-offset: -2px; }

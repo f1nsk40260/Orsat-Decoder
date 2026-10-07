@@ -438,6 +438,22 @@ function buildCard(c) {
     title: isImg ? 'Télécharger la dernière image (PNG)' : 'Enregistrer le texte' });
   save.onclick = () => isImg ? saveImage(c) : saveText(c);
   if (isIdent) save.hidden = true;
+  // images : recalage manuel (fax), taille réelle / ajustée, plein écran
+  const isFax = m.id === 'wefax';
+  const recal = isFax ? el('button', { class: 'icon-btn small', type: 'button', text: 'Recaler',
+    title: 'Image décalée ? Cliquez ensuite sur le vrai bord gauche de la carte (ou au milieu de sa marge blanche)' }) : null;
+  if (recal) recal.onclick = () => {
+    c.aligning = !c.aligning; c.card.classList.toggle('aligning', c.aligning);
+    if (c.aligning) toast('Cliquez sur le vrai bord gauche de la carte, dans l\'image.');
+  };
+  const zoom = isImg && m.id !== 'hell' ? el('button', { class: 'icon-btn small', type: 'button', text: '1:1',
+    title: 'Afficher l\'image en taille réelle (défilement horizontal) / l\'ajuster à la fenêtre' }) : null;
+  if (zoom) zoom.onclick = () => {
+    const on = c.out.classList.toggle('native');
+    zoom.textContent = on ? 'Ajuster' : '1:1';
+  };
+  const big = isImg ? el('button', { class: 'icon-btn small', type: 'button', text: '⛶', title: 'Plein écran (Échap pour revenir)' }) : null;
+  if (big) big.onclick = () => document.fullscreenElement ? document.exitFullscreen() : c.card.requestFullscreen?.();
   const hasMap = m.id === 'hfdl';
   const mapBtn = hasMap ? el('button', { class: 'icon-btn small', type: 'button', title: 'Carte des avions et des stations au sol', text: 'Carte' }) : null;
   if (mapBtn) mapBtn.onclick = () => toggleMap(c);
@@ -455,14 +471,22 @@ function buildCard(c) {
   const out = el('div', { class: isImg ? 'out img' : isIdent ? 'out ident' : 'out', tabindex: '0' });
   const spec = el('canvas', { class: 'spec', title: 'Spectre du canal : cliquez sur le signal, ou molette pour accorder (Maj : 1 Hz, Alt : 100 Hz)' });
   const specWrap = el('div', { class: 'spec-wrap' }, spec, el('div', { class: 'spec-read' }));
-  const card = el('article', { class: 'chan', style: `--c:${c.color}` },
+  const card = el('article', { class: isFax ? 'chan imgcard' : 'chan', style: `--c:${c.color}` },
     el('header', {}, el('span', { class: 'mname', text: m.label }), freq, el('span', { class: 'unit' }),
-      el('span', { class: 'state' }), el('div', { class: 'tools' }, listen, pause, mapBtn, clear, save, close)),
+      el('span', { class: 'state' }), el('div', { class: 'tools' }, listen, pause, mapBtn, recal, zoom, big, clear, save, close)),
     el('div', { class: 'sub' }, params, meters), specWrap, hasMap ? el('div', { class: 'map', hidden: true }) : null, out);
   Object.assign(c, { card, out, freqIn: freq, meters, pauseBtn: pause, listenBtn: listen, stateEl: card.querySelector('.state'),
     mapEl: card.querySelector('.map'), mapBtn,
     spec, specRead: specWrap.querySelector('.spec-read') });
   card.addEventListener('mousedown', () => setActive(c.id));
+  out.addEventListener('click', e => {
+    const p = c.pic;
+    if (!c.aligning || !p || !p.canvas || e.target !== p.canvas) return;
+    const r = p.canvas.getBoundingClientRect();
+    const x = Math.round((e.clientX - r.left) / r.width * p.w);
+    send({ t: 'imgshift', ch: c.id, x });
+    c.aligning = false; card.classList.remove('aligning');
+  });
   spec.addEventListener('click', e => {
     if (!c.specRange) return;
     const r = spec.getBoundingClientRect(), [a, b] = c.specRange;
@@ -902,7 +926,10 @@ function onImage(c, m) {
       d[k + 3] = 255;
     }
     p.ctx.putImageData(img, 0, m.y);
-    p.rows = Math.max(p.rows, need);
+    if (m.total != null) {                           // image recalée : renvoyée en entier
+      p.rows = m.total;
+      if (p.canvas.height > m.total) { p.ctx.fillStyle = '#000'; p.ctx.fillRect(0, m.total, w, p.canvas.height - m.total); }
+    } else p.rows = Math.max(p.rows, need);
   } else if (m.op === 'cols') {
     const h = p.h, src = b64bytes(m.data), n = m.n;
     let i = 0;

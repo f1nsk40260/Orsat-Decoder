@@ -210,6 +210,17 @@ class Channel:
             return
         fut.add_done_callback(lambda f: self.app.loop.call_soon_threadsafe(self._done, f, dec))
 
+    def shift_image(self, x):
+        """Recalage manuel de l'image (fax) : fait dans le fil du décodeur, entre deux blocs audio."""
+        dec = self.decoder
+        if dec is None or not hasattr(dec, "shift_x"):
+            return
+        try:
+            fut = self.exec.submit(dec.shift_x, float(x))
+        except RuntimeError:
+            return
+        fut.add_done_callback(lambda f: self.app.loop.call_soon_threadsafe(self._done, f, dec))
+
     def _done(self, fut, dec):
         try:
             events = fut.result()
@@ -441,6 +452,10 @@ class App:
                 ch.reset_decoder()
                 self.chan_update(ch)
                 self._save_channels()
+        elif t == "imgshift":
+            ch = self.channels.get(m.get("ch"))
+            if ch and m.get("x") is not None:
+                ch.shift_image(m["x"])
         elif t == "listen":
             self.listen = m.get("ch") or None
         elif t == "view":
