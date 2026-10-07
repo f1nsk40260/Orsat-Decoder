@@ -94,7 +94,7 @@
 
 <dialog id="bmDialog" class="sheet">
   <form method="dialog" id="bmForm">
-    <header><h2 id="bmTitle">Signet</h2><button class="icon-btn" value="cancel" aria-label="Fermer">✕</button></header>
+    <header><h2 id="bmTitle">Signet</h2><button type="button" class="icon-btn bm-cancel" aria-label="Fermer">✕</button></header>
     <label class="row">Nom<input id="bmLabel" maxlength="60" required spellcheck="false"></label>
     <label class="row">Fréquence (kHz)<input id="bmFreq" inputmode="decimal" required spellcheck="false"></label>
     <label class="row">Mode<select id="bmMode"></select></label>
@@ -104,7 +104,7 @@
     <div class="row-btns">
       <button type="button" id="bmDelete" class="btn danger">Supprimer</button>
       <span class="spacer"></span>
-      <button value="cancel" class="btn">Annuler</button>
+      <button type="button" class="btn bm-cancel">Annuler</button>
       <button value="ok" id="bmOk" class="btn">Enregistrer</button>
     </div>
   </form>

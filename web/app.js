@@ -185,6 +185,8 @@ function bmEdit(idx, init) {
   $('#bmRibbonChk').checked = b.ribbon !== false;
   $('#bmDelete').hidden = isNew;
   $('#bmDelete').onclick = () => { dlg.close(); bmSave(S.bookmarks.filter((_, i) => i !== idx)); };
+  // Annuler et ✕ ferment sans valider le formulaire (champs obligatoires vides compris)
+  for (const btn of dlg.querySelectorAll('.bm-cancel')) btn.onclick = () => dlg.close();
   $('#bmForm').onsubmit = e => {
     if (e.submitter && e.submitter.value !== 'ok') return;
     const f = parseFloat($('#bmFreq').value.replace(/\s/g, '').replace(',', '.')) * 1000;
