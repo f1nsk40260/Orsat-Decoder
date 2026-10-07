@@ -263,3 +263,4 @@ dialog code { color: var(--text); }
 .map-legend { background: #141E28d9; color: var(--text); padding: 4px 8px; border-radius: 6px; font-size: 12px; }
 .map-legend .lg-plane { color: var(--fluo); } .map-legend .lg-heard { color: #FF9F1C; }
 .map-legend .lg-gs { color: var(--gold); } .map-legend .lg-gs0 { color: #6E8193; }
+.plane-ico.old { color: #8FB98A; opacity: .55; }

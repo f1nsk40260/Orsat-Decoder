@@ -506,7 +506,10 @@ function mapUpdate(c, m) {
   const d = (c.mapData ||= { planes: new Map(), gs: new Map(), heard: new Map() });
   for (const g of m.gs || []) d.gs.set(g.id, { ...g, seen: m.utc });
   for (const p of m.pos || []) {
-    const key = p.flight || p.ac || `${p.lat},${p.lon}`;
+    // identité stable : code ICAO s'il est connu, sinon indicatif du vol ; le numéro de liaison
+    // (« avion 42 ») est réattribué par les stations à d'autres avions, il ne sert qu'en dernier recours
+    const icao = (p.ac || '').match(/ICAO ([0-9A-F]{6})/);
+    const key = icao ? icao[1] : (p.flight || p.ac || `${p.lat},${p.lon}`);
     const pl = d.planes.get(key) || { key, track: [] };
     const last = pl.track[pl.track.length - 1];
     if (!last || last.lat !== p.lat || last.lon !== p.lon) pl.track.push({ lat: p.lat, lon: p.lon });
@@ -522,7 +525,10 @@ function mapUpdate(c, m) {
     while (d.heard.size > 60) d.heard.delete(d.heard.keys().next().value);
   }
   for (const a of placed) d.heard.delete(a);
-  if (c.map) mapDraw(c);
+  if (c.map && !c.mapPending) {                            // un seul dessin par image, même en rafale
+    c.mapPending = true;
+    requestAnimationFrame(() => { c.mapPending = false; mapDraw(c); });
+  }
   if (c.mapBtn) {
     const n = d.planes.size, u = d.heard.size;
     c.mapBtn.textContent = n || u ? `Carte (${n}${u ? ' + ' + u : ''})` : 'Carte';
@@ -565,9 +571,9 @@ function toggleMap(c) {
     div.addEventListener('touchstart', manual, { passive: true });
     const Fit = L.Control.extend({ options: { position: 'topleft' }, onAdd: () => {
       const b = L.DomUtil.create('a', 'map-fit');
-      b.href = '#'; b.title = 'Tout voir et suivre les nouveaux avions'; b.textContent = '⤢';
+      b.href = '#'; b.title = 'Tout voir'; b.textContent = '⤢';
       L.DomEvent.on(b, 'mousedown wheel', L.DomEvent.stopPropagation);
-      L.DomEvent.on(b, 'click', e => { L.DomEvent.preventDefault(e); c.mapAuto = true; mapFit(c, true); });
+      L.DomEvent.on(b, 'click', e => { L.DomEvent.preventDefault(e); mapFit(c, true); });
       const box = L.DomUtil.create('div', 'leaflet-bar'); box.append(b); return box;
     } });
     c.map.addControl(new Fit());
@@ -588,11 +594,11 @@ function mapFit(c, force) {
   for (const g of d.gs.values()) pts.push([g.lat, g.lon]);
   if (!pts.length) return;
   const b = L.latLngBounds(pts);
-  // en suivi automatique, on recadre quand un avion ou une station apparaît, ou quand un avion sort du cadre
-  const n = pts.length;
-  if (!force && n === c.mapFitN && c.map.getBounds().pad(-0.05).contains(b)) return;
-  c.mapFitN = n;
-  c.map.fitBounds(b.pad(0.25), { maxZoom: 5, animate: !force });
+  // cadrage à l'ouverture et sur le bouton ⤢ ; ensuite la carte ne bouge plus d'elle-même,
+  // sauf si le cadre est encore vide (premières positions reçues)
+  if (!force && (c.mapFitN || 0) > 0) return;
+  c.mapFitN = pts.length;
+  c.map.fitBounds(b.pad(0.25), { maxZoom: 5, animate: false });
 }
 function mapDraw(c) {
   const d = c.mapData; if (!d || !c.map) return;
@@ -603,10 +609,14 @@ function mapDraw(c) {
     s.mk.setTooltipContent(`Station HFDL ${id} : ${s.g.name}<br>entendue à ${fmtUtc(g.seen)} UTC<br>${s.g.freqs.join(', ')} kHz`);
   }
   // avions positionnés : mis à jour sur place (une bulle ouverte reste ouverte)
+  const nowMin = (() => { const t = new Date(); return t.getUTCHours() * 60 + t.getUTCMinutes(); })();
   for (const [key, p] of d.planes) {
-    const n = p.track.length, hdg = n > 1 ? bearing(p.track[n - 2], p.track[n - 1]) : 0;
-    const icon = L.divIcon({ className: 'plane-ico', iconSize: [22, 22], iconAnchor: [11, 11],
+    const n = p.track.length, hdg = n > 1 ? Math.round(bearing(p.track[n - 2], p.track[n - 1])) : 0;
+    const age = p.seen ? (nowMin - (+p.seen.slice(0, 2) * 60 + +p.seen.slice(2, 4)) + 1440) % 1440 : 0;
+    const old = age > 30;                                     // plus de 30 min sans nouvelle position : estompé
+    const icon = L.divIcon({ className: 'plane-ico' + (old ? ' old' : ''), iconSize: [22, 22], iconAnchor: [11, 11],
       html: `<div style="transform:rotate(${hdg}deg)">${PLANE_SVG}</div>` });
+    const sig = `${hdg}|${old}`;
     const html = `<b>${p.flight || '?'}</b>${p.ac ? ' · ' + p.ac : ''}<br>${p.lat.toFixed(3)}°, ${p.lon.toFixed(3)}°<br>`
       + `position de ${p.time} UTC, reçue à ${fmtUtc(p.seen)} UTC` + (n > 1 ? `<br>${n} positions` : '');
     let o = c.mk.planes.get(key);
@@ -617,8 +627,10 @@ function mapDraw(c) {
           .bindPopup(html) };
       c.mk.planes.set(key, o);
     } else {
-      o.mk.setLatLng([p.lat, p.lon]).setIcon(icon).setPopupContent(html);
+      o.mk.setLatLng([p.lat, p.lon]).setPopupContent(html);
+      if (o.sig !== sig) o.mk.setIcon(icon);
     }
+    o.sig = sig;
     o.line.setLatLngs(n > 1 ? p.track.map(t => [t.lat, t.lon]) : []);
   }
   // avions entendus sans position : en orange, en couronne autour de la station avec laquelle ils parlent
@@ -627,8 +639,10 @@ function mapDraw(c) {
   const keep = new Set();
   for (const [gid, list] of byGs) {
     const st = (S.catalog.hfdl_stations || []).find(g => g.id === gid); if (!st) continue;
-    list.forEach((h, i) => {
-      const ang = 2 * Math.PI * i / Math.max(list.length, 6), r = 2.2 + 0.9 * Math.floor(i / 12);
+    list.forEach(h => {
+      // place fixe pour chaque avion (dérivée de son nom) : les points ne sautent plus d'un message à l'autre
+      let hsh = 0; for (const ch of h.ac) hsh = (hsh * 31 + ch.charCodeAt(0)) >>> 0;
+      const slot = hsh % 48, ang = 2 * Math.PI * (slot % 16) / 16, r = 2.2 + 1.1 * Math.floor(slot / 16);
       const ll = [st.lat + r * Math.sin(ang), st.lon + r * Math.cos(ang) / Math.max(0.2, Math.cos(st.lat * Math.PI / 180))];
       const tip = `${h.ac} : position inconnue<br>en liaison avec ${st.name}, à ${fmtUtc(h.seen)} UTC`;
       let o = c.mk.heard.get(h.ac);
