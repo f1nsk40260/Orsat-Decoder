@@ -62,6 +62,10 @@ def load_conf():
     c.setdefault("source", c["sources"][0]["id"])
     c.setdefault("channels", [])
     c.setdefault("ui", {})
+    if "bookmarks" not in c:                      # premiers signets : les fréquences préréglées
+        from .modes import PRESETS
+        c["bookmarks"] = [{"label": p["label"], "mode": p["mode"], "freq": p["freq"], "ribbon": True,
+                           **({"params": p["params"]} if p.get("params") else {})} for p in PRESETS]
     return c
 
 
@@ -474,6 +478,25 @@ class App:
                     await self.connect_source()
         elif t == "audio_inputs":
             await self._send(ws, json.dumps({"t": "audio_inputs", "inputs": await asyncio.to_thread(list_audio_inputs)}))
+        elif t == "bookmarks":
+            bms = []
+            for b in m.get("list", []):
+                try:
+                    if b.get("mode") in BY_ID and float(b["freq"]) > 0:
+                        bms.append({"label": str(b.get("label") or "")[:60], "mode": b["mode"], "freq": float(b["freq"]),
+                                    "ribbon": bool(b.get("ribbon", True)),
+                                    **({"params": b["params"]} if isinstance(b.get("params"), dict) else {})})
+                except (TypeError, ValueError, KeyError):
+                    continue
+            self.conf["bookmarks"] = bms
+            save_conf(self.conf)
+            self.broadcast({"t": "bookmarks", "list": bms})
+        elif t == "bookmarks_reset":
+            from .modes import PRESETS
+            self.conf["bookmarks"] = [{"label": p["label"], "mode": p["mode"], "freq": p["freq"], "ribbon": True,
+                                       **({"params": p["params"]} if p.get("params") else {})} for p in PRESETS]
+            save_conf(self.conf)
+            self.broadcast({"t": "bookmarks", "list": self.conf["bookmarks"]})
         elif t == "prefs":
             self.conf.setdefault("ui", {}).update(m.get("prefs", {}))
             save_conf(self.conf)
@@ -504,6 +527,7 @@ class App:
             "t": "hello", "version": __version__, "catalog": public_catalog(), "types": TYPES,
             "sources": self.conf["sources"], "current": self.conf["source"],
             "source": self.src.summary() if self.src else {}, "ui": self.conf.get("ui", {}),
+            "bookmarks": self.conf.get("bookmarks", []),
             "channels": [ch.describe() for ch in self.channels.values()],
         }, ensure_ascii=False, default=_num))
         for ch in self.channels.values():

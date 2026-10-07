@@ -50,8 +50,8 @@ L'installateur :
 - **Identification automatique** : on clique sur un signal inconnu, Orsat-Decoder le compare aux
   257 signaux de la base Artemis (sigidwiki), essaie les décodeurs des meilleurs candidats et ouvre
   le bon mode quand un texte lisible sort.
-- **Annuaire des fréquences** : tous les signaux identifiables, avec leurs fréquences connues, en un
-  clic.
+- **Signets** modifiables, affichés sous l'échelle du waterfall, et annuaire de tous les signaux
+  identifiables avec leurs fréquences connues.
 - **Interface web locale** : elle s'ouvre dans une fenêtre, ou depuis un autre PC du réseau avec
   `--lan`.
 - **Réception uniquement** : aucune fonction d'émission.
@@ -115,7 +115,7 @@ fréquences affichées sont les fréquences audio (Hz).
 1. Choisissez la source en haut à gauche.
 2. Choisissez un mode dans la colonne de gauche, puis **cliquez sur un signal** dans le waterfall : un
    canal s'ouvre. Chaque décodeur retrouve seul son signal dans environ ±100 Hz autour du clic.
-3. Ou ouvrez une **fréquence connue** (voir ci-dessous). Avec TCI ou CAT, le récepteur est réaccordé
+3. Ou ouvrez un **signet** (voir ci-dessous). Avec TCI ou CAT, le récepteur est réaccordé
    automatiquement.
 
 Dans le waterfall :
@@ -134,19 +134,28 @@ mode, pause, effacement, enregistrement du texte, et bouton **Écouter** pour en
 reçoit ce décodeur. Si rien n'arrive pendant 5 s, la carte passe en rouge « pas d'audio reçu » et
 indique la raison donnée par le serveur.
 
-### Fréquences connues
+### Signets
 
-![Annuaire des fréquences : recherche « dsc »](docs/images/annuaire.jpg)
+![Signets et annuaire des signaux : recherche « dsc »](docs/images/annuaire.jpg)
 
-Le bouton **Fréquences connues** ouvre un annuaire avec une recherche (nom, mode ou fréquence en kHz) :
+Le bouton **Signets** ouvre vos fréquences enregistrées, avec une recherche (nom, mode ou fréquence en
+kHz). Au premier lancement, la liste contient les fréquences habituelles : Navtex, DSC, fax météo,
+FT8, JS8, WSPR, HFDL, ACARS…
 
-- d'abord les fréquences préréglées : Navtex, DSC, fax météo, FT8, JS8, WSPR, HFDL, ACARS… ;
-- puis **les 257 signaux identifiables** de la base Artemis, avec leurs fréquences connues et un lien
-  vers leur fiche sigidwiki.
+- **+ Nouveau signet** : nom, fréquence, mode et affichage ou non sous l'échelle du waterfall.
+- **+ Canal actif** : met en signet la fréquence et le mode du canal sélectionné.
+- **✎** modifie un signet, **✕** le supprime, **⚑** l'affiche ou le retire sous l'échelle.
+- **Signets par défaut** remet la liste d'origine.
 
-En **vert fluo**, les signaux qu'Orsat-Decoder sait décoder : un clic ouvre le décodeur sur cette
-fréquence. En **blanc**, ceux qu'il sait seulement reconnaître : un clic ouvre un canal **Identifier**.
-Quand la base ne donne qu'une plage (« 3 000 à 30 000 kHz »), elle est affichée en gris.
+Les signets marqués ⚑ apparaissent **sous l'échelle de fréquence du waterfall**, à leur place : un
+clic ouvre le canal (et réaccorde le récepteur en TCI ou CAT). Quand ils sont trop serrés, ils se
+réduisent à un trait ; le survol affiche leur nom.
+
+En dessous, la liste reprend **les 257 signaux identifiables** de la base Artemis avec leurs
+fréquences connues, et un lien vers leur fiche sigidwiki. Le **+** à côté d'une fréquence en fait un
+signet. En **vert fluo**, les signaux qu'Orsat-Decoder sait décoder : un clic ouvre le décodeur. En
+**blanc**, ceux qu'il sait seulement reconnaître : un clic ouvre un canal **Identifier**. Quand la base
+ne donne qu'une plage (« 3 000 à 30 000 kHz »), elle est affichée en gris.
 
 ### Identification automatique
 

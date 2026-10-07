@@ -15,7 +15,7 @@ const el = (tag, props = {}, ...kids) => {
 const COLORS = ['#C9A24A', '#4FB3BF', '#E07A5F', '#9B8AE6', '#7FB685', '#6FA8DC', '#D98CB3', '#B8C25A'];
 
 const S = {
-  ws: null, catalog: { modes: [], presets: [] }, byId: {}, types: {}, sources: [], current: null, server: {},
+  ws: null, bookmarks: [], catalog: { modes: [], presets: [] }, byId: {}, types: {}, sources: [], current: null, server: {},
   inputs: [],
   chans: new Map(), mode: 'psk31',
   view: null,                 // [f0, f1] Hz affichés
@@ -47,8 +47,10 @@ const H = {
     applyUi();
     for (const c of [...S.chans.keys()]) removeChanCard(c);
     m.channels.forEach(upsertChan);
-    renderSources(); renderModes(); renderPresets(); onSource(m.source);
+    S.bookmarks = m.bookmarks || [];
+    renderSources(); renderModes(); renderPresets(); renderRibbon(); onSource(m.source);
   },
+  bookmarks(m) { S.bookmarks = m.list; renderPresets(); renderRibbon(); },
   source(m) { onSource(m.info); },
   sources(m) { S.sources = m.sources; S.current = m.current; renderSources(); },
   chans_reset() { for (const c of [...S.chans.keys()]) removeChanCard(c); },
@@ -165,33 +167,82 @@ function renderModes() {
     ? `Mode choisi : ${m.label}. Cliquez sur un signal dans le waterfall audio : tous les canaux partagent l'audio de la source.`
     : `Mode choisi : ${m.label}. Cliquez sur un signal dans le waterfall pour ouvrir un canal.`;
 }
+// ------------------------------------------------------------------ signets
+function bmSave(list) { S.bookmarks = list; send({ t: 'bookmarks', list }); renderPresets(); renderRibbon(); }
+function bmEdit(idx, init) {
+  const dlg = $('#bmDialog'), isNew = idx == null;
+  const b = isNew ? { label: '', mode: S.mode || 'psk31', freq: 0, ribbon: true, ...(init || {}) } : S.bookmarks[idx];
+  $('#bmTitle').textContent = isNew ? 'Nouveau signet' : 'Modifier le signet';
+  $('#bmLabel').value = b.label || '';
+  $('#bmFreq').value = b.freq ? fmtKHz(b.freq).replace(/\s/g, '') : '';
+  const sel = $('#bmMode'); sel.replaceChildren();
+  let fam = null, og = null;
+  for (const m of S.catalog.modes) {
+    if (m.family !== fam) { fam = m.family; og = el('optgroup', { label: fam }); sel.append(og); }
+    og.append(el('option', { value: m.id, text: m.label }));
+  }
+  sel.value = b.mode;
+  $('#bmRibbonChk').checked = b.ribbon !== false;
+  $('#bmDelete').hidden = isNew;
+  $('#bmDelete').onclick = () => { dlg.close(); bmSave(S.bookmarks.filter((_, i) => i !== idx)); };
+  $('#bmForm').onsubmit = e => {
+    if (e.submitter && e.submitter.value !== 'ok') return;
+    const f = parseFloat($('#bmFreq').value.replace(/\s/g, '').replace(',', '.')) * 1000;
+    if (!(f > 0)) { e.preventDefault(); $('#bmFreq').focus(); toast('Fréquence invalide.', 'error'); return; }
+    const nb = { ...b, label: $('#bmLabel').value.trim() || `${S.byId[sel.value]?.label || sel.value} ${fmtKHz(f)}`,
+      mode: sel.value, freq: f, ribbon: $('#bmRibbonChk').checked };
+    const list = [...S.bookmarks];
+    if (isNew) list.push(nb); else list[idx] = nb;
+    bmSave(list);
+  };
+  $('#presetMenu').hidden = true;
+  dlg.showModal();
+  $('#bmLabel').focus();
+}
 function renderPresets() {
   const menu = $('#presetMenu'); menu.replaceChildren();
-  const q = el('input', { type: 'search', class: 'dir-search', placeholder: 'Chercher un signal, un mode ou une fréquence (kHz)…',
+  const q = el('input', { type: 'search', class: 'dir-search', placeholder: 'Chercher un signet, un signal, un mode ou une fréquence (kHz)…',
     autocomplete: 'off', spellcheck: 'false' });
+  const active = S.chans.get(S.active);
+  const tools = el('div', { class: 'dir-tools' },
+    el('button', { type: 'button', class: 'btn', text: '+ Nouveau signet', onclick: e => { e.stopPropagation(); bmEdit(null); } }),
+    el('button', { type: 'button', class: 'btn', text: '+ Canal actif', title: 'Mettre en signet la fréquence et le mode du canal actif',
+      disabled: active ? null : 'disabled',
+      onclick: e => { e.stopPropagation(); const c = S.chans.get(S.active); if (c) bmEdit(null, { mode: c.mode, freq: c.freq,
+        label: `${S.byId[c.mode]?.label || c.mode} ${fmtKHz(c.freq)}` }); } }),
+    el('span', { class: 'spacer' }),
+    el('button', { type: 'button', class: 'btn', text: 'Signets par défaut', title: 'Remplacer vos signets par la liste d\'origine',
+      onclick: e => { e.stopPropagation(); if (confirm('Remplacer tous vos signets par la liste d\'origine ?')) send({ t: 'bookmarks_reset' }); } }));
   const legend = el('div', { class: 'dir-legend' },
-    el('span', { class: 'dec', text: 'décodable' }), el('span', { class: 'nodec', text: 'identifiable seulement (ouvre « Identifier »)' }));
+    el('span', { class: 'dec', text: 'décodable' }), el('span', { class: 'nodec', text: 'identifiable seulement (ouvre « Identifier »)' }),
+    el('span', { class: 'flag', text: '⚑ affiché sous l\'échelle du waterfall' }));
   const body = el('div', { class: 'dir-body' });
-  menu.append(el('div', { class: 'dir-head' }, q, legend), body);
+  menu.append(el('div', { class: 'dir-head' }, q, tools, legend), body);
   const freqBtn = (f, dec, onclick, title) => el('button', { type: 'button', class: 'fchip ' + (dec ? 'dec' : 'nodec'), title,
     onclick: e => { e.stopPropagation(); menu.hidden = true; onclick(); } }, fmtKHz(f));
   const sections = [];
-  // 1. fréquences préréglées (toutes décodables), groupées par mode
-  const pre = el('div', { class: 'dir-sec' }, el('div', { class: 'grp', text: 'Fréquences préréglées' }));
-  const byMode = new Map();
-  for (const p of S.catalog.presets) {
-    if (!byMode.has(p.mode)) byMode.set(p.mode, []);
-    byMode.get(p.mode).push(p);
+  // 1. les signets de l'utilisateur
+  const mine = el('div', { class: 'dir-sec' }, el('div', { class: 'grp', text: `Mes signets (${S.bookmarks.length})` }));
+  const order = S.bookmarks.map((bm, i) => [bm, i]).sort((x, y) =>
+    (S.byId[x[0].mode]?.label || '').localeCompare(S.byId[y[0].mode]?.label || '') || x[0].freq - y[0].freq);
+  for (const [bm, i] of order) {
+    const ml = S.byId[bm.mode]?.label || bm.mode, dec = S.byId[bm.mode]?.kind !== 'ident';
+    const flag = el('button', { type: 'button', class: 'bm-flag' + (bm.ribbon !== false ? ' on' : ''),
+      title: bm.ribbon !== false ? 'Affiché sous l\'échelle : cliquer pour le retirer' : 'Afficher sous l\'échelle du waterfall', text: '⚑',
+      onclick: e => { e.stopPropagation(); const l = [...S.bookmarks]; l[i] = { ...bm, ribbon: bm.ribbon === false }; bmSave(l); } });
+    const edit = el('button', { type: 'button', class: 'bm-act', title: 'Modifier', text: '✎', onclick: e => { e.stopPropagation(); bmEdit(i); } });
+    const del = el('button', { type: 'button', class: 'bm-act', title: 'Supprimer', text: '✕',
+      onclick: e => { e.stopPropagation(); bmSave(S.bookmarks.filter((_, j) => j !== i)); } });
+    const row = el('div', { class: 'dir-row bm-row' },
+      el('span', { class: 'dir-title' }, el('span', { class: 'dir-name ' + (dec ? 'dec' : 'nodec'), text: bm.label }),
+        el('span', { class: 'dir-mode', text: ml })),
+      el('span', { class: 'dir-freqs' }, freqBtn(bm.freq, dec, () => usePreset(bm), `Ouvrir ${ml} sur ${fmtKHz(bm.freq)} kHz`),
+        el('span', { class: 'spacer' }), flag, edit, del));
+    row.dataset.key = (bm.label + ' ' + ml + ' ' + bm.freq / 1000).toLowerCase();
+    mine.append(row);
   }
-  for (const [mode, list] of byMode) {
-    const label = S.byId[mode]?.label || mode;
-    const row = el('div', { class: 'dir-row' }, el('span', { class: 'dir-name dec', text: label }),
-      el('span', { class: 'dir-freqs' }, ...list.map(p => freqBtn(p.freq, true, () => usePreset(p), p.label))));
-    row.dataset.key = (label + ' ' + list.map(p => p.label + ' ' + p.freq / 1000).join(' ')).toLowerCase();
-    pre.append(row);
-  }
-  sections.push(pre);
-  // 2. tous les signaux identifiables de la base Artemis
+  sections.push(mine);
+  // 2. tous les signaux identifiables de la base Artemis (on peut en faire des signets)
   const all = el('div', { class: 'dir-sec' }, el('div', { class: 'grp', text: `Signaux identifiables (base Artemis, ${(S.catalog.directory || []).length})` }));
   for (const d of S.catalog.directory || []) {
     const dec = !!d.mode;
@@ -200,8 +251,12 @@ function renderPresets() {
     const name = el('a', { class: 'dir-name ' + (dec ? 'dec' : 'nodec'), href: `https://www.sigidwiki.com/index.php?curid=${d.id}`,
       target: '_blank', rel: 'noopener', title: 'Fiche sigidwiki', text: d.title });
     const freqs = el('span', { class: 'dir-freqs' });
-    for (const f of d.freqs) freqs.append(freqBtn(f, dec, () => usePreset({ mode, freq: f }),
-      dec ? `Ouvrir ${ml} sur ${fmtKHz(f)} kHz` : `Identifier le signal sur ${fmtKHz(f)} kHz`));
+    for (const f of d.freqs) {
+      freqs.append(el('span', { class: 'fpair' },
+        freqBtn(f, dec, () => usePreset({ mode, freq: f }), dec ? `Ouvrir ${ml} sur ${fmtKHz(f)} kHz` : `Identifier le signal sur ${fmtKHz(f)} kHz`),
+        el('button', { type: 'button', class: 'fadd', title: 'Ajouter aux signets', text: '+',
+          onclick: e => { e.stopPropagation(); bmEdit(null, { mode, freq: f, label: d.title.slice(0, 60) }); } })));
+    }
     if (d.range) freqs.append(el('span', { class: 'frange', text: `${fmtKHz(d.range[0])} à ${fmtKHz(d.range[1])} kHz` }));
     if (!d.freqs.length && !d.range) freqs.append(el('span', { class: 'frange', text: 'fréquence non précisée' }));
     const row = el('div', { class: 'dir-row' }, el('span', { class: 'dir-title' }, name,
@@ -217,6 +272,28 @@ function renderPresets() {
     for (const r of body.querySelectorAll('.dir-row')) r.hidden = !!t && !r.dataset.key.includes(t);
     for (const sec of sections) sec.hidden = ![...sec.querySelectorAll('.dir-row')].some(r => !r.hidden);
   });
+}
+// bande de signets sous l'échelle du waterfall : un clic ouvre le canal
+function renderRibbon() {
+  const box = $('#bmRibbon'); if (!box) return;
+  box.replaceChildren();
+  if (!S.view || !WF.c || !S.bookmarks) return;
+  const W = WF.c.getBoundingClientRect().width;
+  const items = S.bookmarks.filter(b => b.ribbon !== false).map(b => ({ b, x: xOfFreq(b.freq) }))
+    .filter(o => o.x >= -2 && o.x <= W + 2).sort((p, q) => p.x - q.x);
+  let right = -1e9;
+  for (const { b, x } of items) {
+    const ml = S.byId[b.mode]?.label || b.mode;
+    const flag = el('button', { type: 'button', class: 'rb', style: `left:${x}px`,
+      title: `${b.label} — ${ml}, ${fmtKHz(b.freq)} kHz : cliquer pour ouvrir`,
+      onclick: e => { e.stopPropagation(); usePreset(b); } });
+    const lbl = el('span', { text: b.label });
+    flag.append(lbl);
+    box.append(flag);
+    const w = lbl.getBoundingClientRect().width + 14;
+    if (x < right) flag.classList.add('mini');          // libellés qui se chevauchent : simple repère
+    else right = x + w;
+  }
 }
 function usePreset(p) {
   if (S.server.shared) { send({ t: 'preset', mode: p.mode, freq: p.freq, params: p.params }); return; }
@@ -907,6 +984,7 @@ function snapFreq(f, bw, fsk) {
   return sw ? f0 + sx / sw / w * (f1 - f0) : f;
 }
 function placeMarkers() {
+  renderRibbon();
   const box = $('#markers'); box.replaceChildren();
   if (!S.view || !WF.c) return;
   for (const c of S.chans.values()) {
@@ -1062,7 +1140,7 @@ function wire() {
     e.stopPropagation();
     const m = $('#presetMenu');
     m.hidden = !m.hidden;
-    if (!m.hidden) m.querySelector('.dir-search')?.focus();
+    if (!m.hidden) { renderPresets(); m.querySelector('.dir-search')?.focus(); }
   };
   document.addEventListener('click', e => { if (!e.target.closest('.menu-wrap')) $('#presetMenu').hidden = true; });
   $('#settingsBtn').onclick = () => { send({ t: 'audio_inputs' }); $('#settings').showModal(); };

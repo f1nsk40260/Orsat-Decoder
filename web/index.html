@@ -28,7 +28,7 @@
     <div class="spacer"></div>
 
     <div class="menu-wrap">
-      <button id="presetBtn" class="btn">Fréquences connues</button>
+      <button id="presetBtn" class="btn" title="Signets : vos fréquences, et les signaux de la base Artemis">Signets</button>
       <div id="presetMenu" class="menu" hidden></div>
     </div>
     <button id="settingsBtn" class="icon-btn" title="Réglages" aria-label="Réglages">
@@ -46,6 +46,7 @@
   <main id="main">
     <section id="wfWrap">
       <canvas id="wf"></canvas>
+      <div id="bmRibbon" aria-label="Signets"></div>
       <div id="markers"></div>
       <div id="wfHover" class="wf-hover"></div>
       <div class="zoom">
@@ -60,7 +61,7 @@
       <div id="chans"></div>
       <div id="chanEmpty" class="empty-state">
         <p>Aucun canal ouvert.</p>
-        <p class="sub">Cliquez sur un signal dans le waterfall avec le mode choisi à gauche, ou utilisez « Fréquences connues ».</p>
+        <p class="sub">Cliquez sur un signal dans le waterfall avec le mode choisi à gauche, ou utilisez « Signets ».</p>
       </div>
     </section>
   </main>
@@ -88,6 +89,24 @@
     <label class="row">Plancher<input id="setFloor" type="range" min="-30" max="30" step="1" value="0"></label>
     <h3>Application</h3>
     <div class="row-btns"><button type="button" id="quitBtn" class="btn danger">Quitter Orsat-Decoder</button></div>
+  </form>
+</dialog>
+
+<dialog id="bmDialog" class="sheet">
+  <form method="dialog" id="bmForm">
+    <header><h2 id="bmTitle">Signet</h2><button class="icon-btn" value="cancel" aria-label="Fermer">✕</button></header>
+    <label class="row">Nom<input id="bmLabel" maxlength="60" required spellcheck="false"></label>
+    <label class="row">Fréquence (kHz)<input id="bmFreq" inputmode="decimal" required spellcheck="false"></label>
+    <label class="row">Mode<select id="bmMode"></select></label>
+    <label class="row">Sur l'échelle<input id="bmRibbonChk" type="checkbox"></label>
+    <p class="hint">Pour un mode qui décode toute la bande audio (FT8, WSPR, JS8…), donnez la fréquence du cadran (USB) ;
+      pour les autres, le centre du signal.</p>
+    <div class="row-btns">
+      <button type="button" id="bmDelete" class="btn danger">Supprimer</button>
+      <span class="spacer"></span>
+      <button value="cancel" class="btn">Annuler</button>
+      <button value="ok" id="bmOk" class="btn">Enregistrer</button>
+    </div>
   </form>
 </dialog>
 

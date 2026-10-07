@@ -87,7 +87,7 @@ input[type=search]::placeholder { color: var(--muted); }
 .marker { position: absolute; top: 24px; bottom: 0; pointer-events: auto; cursor: ew-resize; }
 .marker .band { position: absolute; inset: 0; opacity: .16; }
 .marker .edge { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1px dashed; opacity: .7; }
-.marker .tag { position: absolute; top: 4px; left: 50%; transform: translateX(-50%); white-space: nowrap; font-size: 11.5px;
+.marker .tag { position: absolute; top: 24px; left: 50%; transform: translateX(-50%); white-space: nowrap; font-size: 11.5px;
   padding: 1px 7px; border-radius: 4px; color: #10161d; font-weight: 700; }
 .wf-hover { position: absolute; top: 28px; padding: 2px 7px; border-radius: 4px; pointer-events: none; background: #000b;
   font-size: 12px; font-variant-numeric: tabular-nums; display: none; transform: translateX(-50%); white-space: nowrap; }
@@ -264,3 +264,34 @@ dialog code { color: var(--text); }
 .map-legend .lg-plane { color: var(--fluo); } .map-legend .lg-heard { color: #FF9F1C; }
 .map-legend .lg-gs { color: var(--gold); } .map-legend .lg-gs0 { color: #6E8193; }
 .plane-ico.old { color: #8FB98A; opacity: .55; }
+
+/* ---------- signets ---------- */
+.dir-tools { display: flex; gap: 6px; align-items: center; }
+.dir-tools .btn[disabled] { opacity: .45; cursor: default; }
+.dir-legend .flag { color: var(--gold); }
+.bm-row .dir-freqs { flex-wrap: nowrap; }
+.menu button.bm-flag, .menu button.bm-act { width: auto; display: inline-block; padding: 1px 6px; color: var(--muted); }
+.menu button.bm-flag.on { color: var(--gold); }
+.menu button.bm-act:hover, .menu button.bm-flag:hover { color: var(--text); }
+.fpair { display: inline-flex; align-items: stretch; }
+.menu .fpair button.fchip { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.menu button.fadd { width: auto; display: inline-block; padding: 0 5px; border: 1px solid #ffffff33; border-left: 0;
+  border-radius: 0 5px 5px 0; color: var(--muted); font-size: 12px; }
+.menu button.fadd:hover { color: var(--gold); background: #C9A24A22; }
+#bmDialog { width: min(520px, 94vw); }
+#bmDialog input:not([type=checkbox]), #bmDialog select { background: var(--night); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; width: 100%; }
+#bmDialog input[type=checkbox] { justify-self: start; accent-color: var(--gold); width: 18px; height: 18px; }
+#bmDialog .row-btns { margin-top: 14px; }
+#bmRibbon { position: absolute; left: 0; right: 0; top: 24px; height: 20px; z-index: 3; pointer-events: none;
+  background: linear-gradient(#141E28e6, #141E2899); }
+#bmRibbon .rb { position: absolute; top: 2px; height: 16px; padding: 0 5px 0 7px; border: 0; border-left: 2px solid var(--gold);
+  background: #C9A24A26; color: #E8D29A; font-size: 11px; line-height: 16px; white-space: nowrap; pointer-events: auto;
+  border-radius: 0 4px 4px 0; cursor: pointer; }
+#bmRibbon .rb:hover { background: #C9A24A55; color: #fff; z-index: 2; }
+#bmRibbon .rb.mini { width: 2px; padding: 0; background: var(--gold); border-radius: 0; }
+#bmRibbon .rb.mini span { display: none; }
+#bmRibbon .rb.mini:hover { width: auto; padding: 0 5px 0 7px; background: #C9A24A; color: #10161d; }
+#bmRibbon .rb.mini:hover span { display: inline; }
+.menu .dir-tools button.btn { width: auto; display: inline-block; background: var(--raise); border: 1px solid var(--line);
+  border-radius: 6px; padding: 4px 11px; font-size: 13px; }
+.menu .dir-tools button.btn:hover { border-color: #3E5266; background: var(--raise); }
