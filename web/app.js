@@ -453,6 +453,9 @@ function buildCard(c) {
     const on = c.out.classList.toggle('native');
     zoom.textContent = on ? 'Ajuster' : '1:1';
   };
+  const rec = el('button', { class: 'icon-btn small rec', type: 'button', text: 'REC',
+    title: 'Enregistrer 3 minutes de l\'audio reçu par ce canal (WAV dans ~/Orsat-Decoder/enregistrements)' });
+  rec.onclick = () => send({ t: 'record', ch: c.id, on: !c.rec, seconds: 180 });
   const big = isImg ? el('button', { class: 'icon-btn small', type: 'button', text: '⛶', title: 'Plein écran (Échap pour revenir)' }) : null;
   if (big) big.onclick = () => document.fullscreenElement ? document.exitFullscreen() : c.card.requestFullscreen?.();
   const hasMap = m.id === 'hfdl';
@@ -474,9 +477,9 @@ function buildCard(c) {
   const specWrap = el('div', { class: 'spec-wrap' }, spec, el('div', { class: 'spec-read' }));
   const card = el('article', { class: isFax ? 'chan imgcard' : 'chan', style: `--c:${c.color}` },
     el('header', {}, el('span', { class: 'mname', text: m.label }), freq, el('span', { class: 'unit' }),
-      el('span', { class: 'state' }), el('div', { class: 'tools' }, listen, pause, mapBtn, recal, zoom, big, clear, save, close)),
+      el('span', { class: 'state' }), el('div', { class: 'tools' }, listen, pause, rec, mapBtn, recal, zoom, big, clear, save, close)),
     el('div', { class: 'sub' }, params, meters), specWrap, hasMap ? el('div', { class: 'map', hidden: true }) : null, out);
-  Object.assign(c, { card, out, freqIn: freq, meters, pauseBtn: pause, listenBtn: listen, stateEl: card.querySelector('.state'),
+  Object.assign(c, { card, out, freqIn: freq, meters, pauseBtn: pause, listenBtn: listen, recBtn: rec, stateEl: card.querySelector('.state'),
     mapEl: card.querySelector('.map'), mapBtn,
     spec, specRead: specWrap.querySelector('.spec-read') });
   card.addEventListener('mousedown', () => setActive(c.id));
@@ -610,6 +613,7 @@ function refreshCard(c) {
   c.stateEl.textContent = c.paused ? 'en pause' : c.state + (c.error ? ` : ${c.error}` : '');
   c.stateEl.classList.toggle('bad', !c.paused && (c.state === "pas d'audio reçu" || c.state === 'erreur'));
   if (c.listenBtn) c.listenBtn.classList.toggle('on', S.listen === c.id);
+  if (c.recBtn) { c.recBtn.classList.toggle('on', !!c.rec); c.recBtn.textContent = c.rec ? '■ REC' : 'REC'; }
   c.pauseBtn.textContent = c.paused ? 'Reprendre' : 'Pause';
   c.card.classList.toggle('paused', !!c.paused);
   for (const [key, [sel, p]] of Object.entries(c.paramSel || {})) {

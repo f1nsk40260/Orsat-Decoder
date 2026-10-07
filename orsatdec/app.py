@@ -14,6 +14,7 @@ import signal
 import struct
 import subprocess
 import time
+import wave
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -109,6 +110,7 @@ class Channel:
         self.ms2 = 0.0                           # puissance audio moyenne (niveau en dBFS)
         self.n_recv = 0                          # échantillons reçus depuis le dernier état
         self.images = ImageStore(DATA / "images", self._file_label) if self.mode.get("kind") == "img" else None
+        self.rec = None                          # enregistrement audio en cours : {"w", "path", "fs", "left"}
 
     def _file_label(self):
         src = self.app.src
@@ -178,9 +180,57 @@ class Channel:
         pkt = struct.pack("<B8sddd", 2, self.id.encode()[:8].ljust(8), base + a0, base + a1, mk) + v.tobytes()
         self.app.loop.call_soon_threadsafe(self.app.broadcast, pkt)
 
+    # ------------------------------------------------------------ enregistrement de l'audio du canal
+    def start_record(self, seconds=180):
+        """Enregistre l'audio tel que le décodeur le reçoit (WAV 16 bits) dans ~/Orsat-Decoder/enregistrements/."""
+        if self.rec:
+            return
+        folder = DATA / "enregistrements"
+        folder.mkdir(parents=True, exist_ok=True)
+        path = folder / (time.strftime("%Y-%m-%d_%H%M%S") + f"_{self._file_label()}.wav")
+        self.rec = {"w": None, "path": path, "fs": None, "left": float(seconds)}
+        self.extra["rec"] = True
+        self.app.chan_update(self)
+
+    def stop_record(self, why=""):
+        r, self.rec = self.rec, None
+        if not r:
+            return
+        if r["w"] is not None:
+            r["w"].close()
+            txt = f"Audio enregistré : {r['path']}" + (f" ({why})" if why else "")
+            log.info(txt)
+        else:
+            txt = "Aucun audio reçu : rien n'a été enregistré."
+        self.extra["rec"] = False
+        self.app.loop.call_soon_threadsafe(self.app.chan_update, self)
+        self.app.loop.call_soon_threadsafe(self.app.broadcast, {"t": "notice", "level": "", "text": txt})
+
+    def _record(self, pcm, fs):
+        r = self.rec
+        if r["w"] is None:
+            r["w"] = wave.open(str(r["path"]), "wb")
+            r["w"].setnchannels(1)
+            r["w"].setsampwidth(2)
+            r["w"].setframerate(int(fs))
+            r["fs"] = fs
+        if fs != r["fs"]:
+            self.stop_record("changement de fréquence d'échantillonnage")
+            return
+        r["w"].writeframes((np.clip(pcm, -1, 1) * 32767).astype("<i2").tobytes())
+        r["left"] -= len(pcm) / fs
+        if r["left"] <= 0:
+            self.stop_record()
+
     def feed(self, pcm, fs):
         """Appelé depuis la boucle principale ou un fil de décodage audio (FLAC)."""
         self.last_audio = time.time()
+        if self.rec and len(pcm):
+            try:
+                self._record(np.asarray(pcm, np.float32), fs)
+            except Exception as e:
+                log.warning("enregistrement audio : %s", e)
+                self.rec = None
         self.n_recv += len(pcm)
         if len(pcm):
             self.ms2 = 0.8 * self.ms2 + 0.2 * float(np.mean(pcm * pcm))
@@ -278,6 +328,7 @@ class Channel:
             asyncio.ensure_future(self.app.remove_channel(self.id))
 
     def stop(self):
+        self.stop_record("canal fermé")
         if self.decoder is not None and hasattr(self.decoder, "close"):
             self.decoder.close()
         self.exec.shutdown(wait=False, cancel_futures=True)
@@ -452,6 +503,13 @@ class App:
                 ch.reset_decoder()
                 self.chan_update(ch)
                 self._save_channels()
+        elif t == "record":
+            ch = self.channels.get(m.get("ch"))
+            if ch:
+                if m.get("on"):
+                    ch.start_record(float(m.get("seconds") or 180))
+                else:
+                    ch.stop_record("arrêté")
         elif t == "imgshift":
             ch = self.channels.get(m.get("ch"))
             if ch and m.get("x") is not None:

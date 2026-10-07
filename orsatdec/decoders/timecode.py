@@ -167,6 +167,7 @@ class TimeCode(Decoder):
         self.sec = None
         self.syms = {}
         self.count = 0
+        self.carrier = None                     # dernière porteuse trouvée (Hz audio), pour l'état affiché
 
     def set_af(self, af):
         super().set_af(af)
@@ -177,6 +178,10 @@ class TimeCode(Decoder):
         st = {"af": round(self.mix.freq, 1), "last": self.count, "sync": self.sec is not None}
         if self.sec is not None:
             st["info"] = f"seconde {self.sec}"
+        elif self.carrier is None:
+            st["info"] = f"porteuse introuvable près de {self.af0:.0f} Hz audio (cliquez dessus dans le mini-spectre)"
+        else:
+            st["info"] = "porteuse trouvée, recherche du début de minute"
         return st
 
     # -------------------------------------------------------------------------------- niveau « actif »
@@ -224,6 +229,7 @@ class TimeCode(Decoder):
         x = np.asarray(x, np.float64)
         if self.finder.feed(x):
             fc = self.finder.find(self.af0, 150.0, min_ratio=20.0)
+            self.carrier = fc
             if fc is not None and abs(fc - self.mix.freq) > 0.5:
                 self.mix.freq = fc
         z = self.mix.process(x)

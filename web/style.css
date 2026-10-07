@@ -342,3 +342,4 @@ dialog .hint.bad { color: var(--bad); }
 
 /* ---------- traduction des bulletins météo (RTTY) ---------- */
 .chan .out .tr { color: #8FD3E0; font: 13.5px/1.45 var(--font); white-space: normal; margin: 0 0 4px 1.5em; }
+.icon-btn.rec.on { color: #fff; background: #C0392B; }
