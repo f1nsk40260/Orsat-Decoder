@@ -2,8 +2,9 @@
 
 Deux familles :
 
-- PhantomSource : un serveur PhantomSDR-Plus / Orsat-SDR. Waterfall large bande fourni par le serveur ;
-  chaque canal ouvre son propre flux audio, accordé indépendamment.
+- Serveurs web (PhantomSource, KiwiSource, OwrxSource) : PhantomSDR-Plus / Orsat-SDR, KiwiSDR,
+  OpenWebRX. Waterfall fourni par le serveur ; chaque canal ouvre son propre flux audio, accordé
+  indépendamment (un auditeur de plus pour le serveur).
 - Sources « audio partagé » (TciSource, PulseSource) : un seul flux audio (la sortie BLU d'un récepteur),
   partagé par tous les canaux, chacun calé sur sa propre fréquence audio. Le waterfall est calculé ici,
   sur cet audio. Le contrôle CAT (TCI intégré, ou rigctld pour l'entrée audio) donne la fréquence du
@@ -23,12 +24,18 @@ from urllib.parse import urlparse
 
 import numpy as np
 
+import aiohttp
+
+from .kiwi import KiwiAudio, KiwiWaterfall
+from .owrx import OwrxAudio, OwrxWaterfall
 from .phantom import AudioChannel, Waterfall
 
 log = logging.getLogger("orsat.sources")
 
 TYPES = {
     "phantom": "PhantomSDR / Orsat-SDR",
+    "kiwi": "KiwiSDR",
+    "owrx": "OpenWebRX",
     "tci": "TCI (AetherSDR, ExpertSDR, Thetis…)",
     "audio": "Entrée audio (PipeWire / PulseAudio)",
 }
@@ -152,11 +159,14 @@ class PhantomSource(Source):
     def attach(self, ch):
         super().attach(ch)
         ch.dial = ch.freq if ch.mode.get("whole") else ch.freq - ch.mode["af"]
-        a = AudioChannel(self.url, ch.dial, ch.mode.get("demod", "USB"), rx=self.rx, tap=self.tap_token(),
-                         on_pcm=ch.feed, on_state=lambda s, i=None, ch=ch: self._on_state(ch, s, i),
-                         session=self.app.http, ask_pcm=self.conf.get("pcm", True))
+        a = self._audio(ch)
         self.streams[ch.id] = a
         a.start()
+
+    def _audio(self, ch):
+        return AudioChannel(self.url, ch.dial, ch.mode.get("demod", "USB"), rx=self.rx, tap=self.tap_token(),
+                            on_pcm=ch.feed, on_state=lambda s, i=None, ch=ch: self._on_state(ch, s, i),
+                            session=self.app.http, ask_pcm=self.conf.get("pcm", True))
 
     async def detach(self, ch):
         await super().detach(ch)
@@ -583,5 +593,124 @@ class PulseSource(SharedSource):
         return {**super().summary(), "device": self.device, "rigctl": self.conf.get("rigctl") or ""}
 
 
+# =====================================================================================
+# KiwiSDR
+# =====================================================================================
+class KiwiSource(PhantomSource):
+    """KiwiSDR : 0 à 30 MHz, waterfall zoomable côté serveur ; chaque canal occupe un des canaux du Kiwi
+    (4 à 8 en général), le waterfall en occupe un aussi."""
+    kind = "kiwi"
+
+    def is_local(self):
+        return False
+
+    def tap_token(self):
+        return None
+
+    async def start(self):
+        self.wf = KiwiWaterfall(self.url, self.conf.get("password", ""), on_line=self.app.wf_line,
+                                on_info=self._on_info, on_state=self._on_wf_state, session=self.app.http)
+        self.wf.start()
+
+    def _on_wf_state(self, state, info=None):
+        if state == "error":
+            self.error = (info or {}).get("error")
+            self.connected = False
+            self.changed()
+        elif state == "connected" and self.error:
+            self.error = None
+            self.changed()
+
+    def _audio(self, ch):
+        return KiwiAudio(self.url, ch.dial, ch.mode.get("demod", "USB"), self.conf.get("password", ""),
+                         on_pcm=ch.feed, on_state=lambda s, i=None, ch=ch: self._on_state(ch, s, i),
+                         session=self.app.http)
+
+    def summary(self):
+        i = self.info or {}
+        return {**Source.summary(self), "url": self.url, "local": False, "internal": False,
+                "basefreq": i.get("basefreq"), "total_bandwidth": i.get("total_bandwidth"),
+                "rx": None, "rx_name": i.get("name"), "receivers": [], "codec": "pcm", "can_qsy": False}
+
+
+# =====================================================================================
+# OpenWebRX
+# =====================================================================================
+class OwrxSource(KiwiSource):
+    """OpenWebRX : la bande est celle du profil en cours ; le sélecteur de récepteur choisit le profil."""
+    kind = "owrx"
+
+    async def start(self):
+        self.wf = OwrxWaterfall(self.url, profile=self.rx, on_line=self.app.wf_line, on_info=self._on_info,
+                                on_state=self._on_wf_state, session=self.app.http)
+        self.wf.start()
+
+    def _on_info(self, info):
+        old = (self.info or {}).get("basefreq"), (self.info or {}).get("total_bandwidth")
+        super()._on_info(dict(info))
+        if old != (info.get("basefreq"), info.get("total_bandwidth")):
+            # bande changée (autre profil choisi, ici ou par un autre auditeur) : on réaccorde les canaux
+            for ch in self.channels.values():
+                a = self.streams.get(ch.id)
+                if a:
+                    asyncio.ensure_future(a.retune())
+
+    def _audio(self, ch):
+        return OwrxAudio(self.url, ch.dial, ch.mode.get("demod", "USB"), on_pcm=ch.feed,
+                         on_state=lambda s, i=None, ch=ch: self._on_state(ch, s, i), session=self.app.http)
+
+    def summary(self):
+        i = self.info or {}
+        profs = i.get("profiles") or []
+        cur = i.get("profile")
+        name = next((p["name"] for p in profs if p["id"] == cur), None)
+        return {**super().summary(), "rx": cur, "rx_name": name, "receivers": profs, "codec": None}
+
+
+# =====================================================================================
+# Reconnaissance du type de serveur à partir de son adresse
+# =====================================================================================
+async def detect_type(session, url):
+    """-> ("phantom" | "kiwi" | "owrx" | "websdr" | None, nom du serveur ou None)."""
+    u = urlparse(url if "://" in url else "http://" + url)
+    base = f"{'https' if u.scheme in ('https', 'wss') else 'http'}://{u.netloc}{(u.path or '').rstrip('/')}"
+    timeout = aiohttp.ClientTimeout(total=6)
+
+    async def get(path):
+        try:
+            async with session.get(base + path, timeout=timeout, allow_redirects=True) as r:
+                if r.status != 200:
+                    return None
+                return (await r.content.read(200_000)).decode("utf-8", "replace")
+        except Exception:
+            return None
+
+    st = await get("/status")
+    if st and "status=" in st and ("users_max=" in st or "bands=" in st or "gps=" in st):
+        name = re.search(r"^name=(.*)$", st, re.M)
+        return "kiwi", name.group(1).strip() if name else None
+    js = await get("/status.json")
+    if js:
+        try:
+            d = json.loads(js)
+            if isinstance(d, dict) and ("receiver" in d or "sdrs" in d):
+                return "owrx", ((d.get("receiver") or {}).get("name") or None)
+        except ValueError:
+            pass
+    page = await get("/") or ""
+    low = page.lower()
+    if "openwebrx" in low:
+        return "owrx", None
+    if "kiwisdr" in low:
+        return "kiwi", None
+    if "phantomsdr" in low or "orsat" in low or "spectrumserver" in low:
+        t = re.search(r"<title>(.*?)</title>", page, re.S | re.I)
+        return "phantom", t.group(1).strip() if t else None
+    if "websdr" in low and "pa3fwm" in low:
+        return "websdr", None
+    return None, None
+
+
 def make_source(app, conf):
-    return {"phantom": PhantomSource, "tci": TciSource, "audio": PulseSource}.get(conf.get("type"), PhantomSource)(app, conf)
+    return {"phantom": PhantomSource, "kiwi": KiwiSource, "owrx": OwrxSource, "tci": TciSource,
+            "audio": PulseSource}.get(conf.get("type"), PhantomSource)(app, conf)

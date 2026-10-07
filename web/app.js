@@ -51,6 +51,7 @@ const H = {
     S.bookmarks = m.bookmarks || [];
     renderSources(); renderModes(); renderPresets(); renderRibbon(); onSource(m.source);
   },
+  detected(m) { if (S.detectWait) { const f = S.detectWait; S.detectWait = null; f(m); } },
   bookmarks(m) { S.bookmarks = m.list; renderPresets(); renderRibbon(); },
   source(m) { onSource(m.info); },
   sources(m) { S.sources = m.sources; S.current = m.current; renderSources(); },
@@ -93,6 +94,7 @@ function onSource(info) {
     let label = s.name;
     if (s.kind === 'phantom') label += (s.rx_name ? ` · ${s.rx_name}` : '') + (s.codec ? ` · ${CODECS[s.codec] || s.codec}` : '');
     else if (s.kind === 'tci') label += s.device ? ` · ${s.device}` : '';
+    else if (s.kind === 'owrx' || s.kind === 'kiwi') label += s.rx_name ? ` · ${s.rx_name}` : '';
     else if (s.nodial) label += ' · sans CAT, fréquences audio';
     setConn(s.error ? `${label} · ${s.error}` : label, s.error ? 'bad' : 'ok');
     $('#wfOverlay').hidden = true;
@@ -118,12 +120,17 @@ function onSource(info) {
 // ------------------------------------------------------------------ sources et récepteurs
 const SRC_FIELDS = {
   phantom: [['url', 'Adresse', 'http://orsat.ddns.net:8080']],
+  kiwi: [['url', 'Adresse', 'http://exemple.org:8073'], ['password', 'Mot de passe (facultatif)', '']],
+  owrx: [['url', 'Adresse', 'http://exemple.org:8073']],
   tci: [['url', 'Adresse TCI', 'ws://127.0.0.1:50001'], ['trx', 'Récepteur (TRX)', '0']],
   audio: [['device', 'Entrée audio', ''], ['rigctl', 'CAT rigctld (facultatif)', '127.0.0.1:4532']],
 };
 function renderSources() {
   const sel = $('#sourceSel'); sel.replaceChildren();
   S.sources.forEach(src => sel.append(el('option', { value: src.id, text: src.name || src.url || src.id })));
+  sel.append(el('option', { disabled: '', text: '──────────' }),
+    el('option', { value: '+add', text: '＋ Ajouter un serveur…' }),
+    el('option', { value: '+manage', text: 'Gérer les sources…' }));
   sel.value = S.current;
   const nt = $('#srcNewType');
   if (!nt.childElementCount) for (const [k, v] of Object.entries(S.types)) nt.append(el('option', { value: k, text: v }));
@@ -146,7 +153,8 @@ function renderSources() {
         if (src.device && !known.has(src.device)) input.append(el('option', { value: src.device, text: src.device }));
         input.value = src.device || '';
       } else {
-        input = el('input', { value: src[key] ?? '', placeholder: ph, 'aria-label': label, spellcheck: 'false' });
+        input = el('input', { value: src[key] ?? '', placeholder: ph, 'aria-label': label, spellcheck: 'false',
+          ...(key === 'password' ? { type: 'password', autocomplete: 'off' } : {}) });
       }
       input.onchange = () => { src[key] = key === 'trx' ? (parseInt(input.value, 10) || 0) : input.value.trim(); commit(); };
       box.append(el('label', { class: 'f' }, label, input));
@@ -154,6 +162,50 @@ function renderSources() {
     list.append(box);
   });
 }
+const SRV_LABEL = { phantom: 'PhantomSDR / Orsat-SDR', kiwi: 'KiwiSDR', owrx: 'OpenWebRX' };
+function srvAdd() {
+  const dlg = $('#srvDialog');
+  $('#srvUrl').value = ''; $('#srvName').value = ''; $('#srvPass').value = ''; $('#srvType').value = '';
+  $('#srvMsg').textContent = 'Collez l\'adresse de la page web du récepteur. Le type est reconnu tout seul.';
+  $('#srvMsg').className = 'hint'; $('#srvPassRow').hidden = true; $('#srvOk').disabled = false;
+  $('#srvType').onchange = () => { $('#srvPassRow').hidden = $('#srvType').value !== 'kiwi'; };
+  for (const b of dlg.querySelectorAll('.srv-cancel')) b.onclick = () => { S.detectWait = null; dlg.close(); };
+  const say = (t, bad) => { $('#srvMsg').textContent = t; $('#srvMsg').className = 'hint' + (bad ? ' bad' : ''); };
+  $('#srvForm').onsubmit = e => {
+    e.preventDefault();
+    let url = $('#srvUrl').value.trim();
+    if (!url) return;
+    if (!/^[a-z]+:\/\//i.test(url)) url = 'http://' + url;
+    const save = (type, name) => {
+      const src = { id: Math.random().toString(36).slice(2, 8), type, url,
+        name: $('#srvName').value.trim() || name || url.replace(/^[a-z]+:\/\//i, '').replace(/\/$/, '') };
+      if (type === 'kiwi') src.password = $('#srvPass').value;
+      S.sources.push(src);
+      send({ t: 'sources_set', sources: S.sources });
+      send({ t: 'select_source', id: src.id });
+      dlg.close();
+      toast(`Serveur « ${src.name} » (${SRV_LABEL[type]}) enregistré.`);
+    };
+    const type = $('#srvType').value;
+    if (type) { save(type); return; }
+    say('Reconnaissance du serveur…'); $('#srvOk').disabled = true;
+    S.detectWait = m => {
+      $('#srvOk').disabled = false;
+      if (m.type === 'websdr')
+        return say('C\'est un WebSDR (websdr.org) : son flux audio est dans un format fermé, Orsat-Decoder ne peut pas s\'y connecter. '
+          + 'Écoutez-le dans le navigateur et choisissez la source « Entrée audio » sur le « Monitor » de la carte son.', true);
+      if (!SRV_LABEL[m.type]) {
+        $('#srvPassRow').hidden = false;
+        return say('Serveur non reconnu (adresse injoignable, ou type inconnu). Vérifiez l\'adresse, ou choisissez le type ci-dessus.', true);
+      }
+      save(m.type, m.name);
+    };
+    send({ t: 'detect', url });
+  };
+  dlg.showModal();
+  $('#srvUrl').focus();
+}
+
 function renderRx(info) {
   const rs = info.receivers || [];
   const sel = $('#rxSel'); sel.replaceChildren();
@@ -319,6 +371,8 @@ function addChannel(mode, freq, params) {
     toast(`${fmtKHz(freq)} kHz est hors de la bande de ce récepteur (${fmtKHz(s.basefreq)} à ${fmtKHz(s.basefreq + s.total_bandwidth)} kHz).`, 'error');
     return;
   }
+  if (s.kind === 'kiwi' && S.chans.size >= 3)
+    toast('Attention : un KiwiSDR n\'a en général que 4 à 8 canaux, et le waterfall en occupe déjà un. Si le Kiwi est plein, ce canal sera refusé.', 'error');
   if (s.kind === 'phantom' && !s.local && S.chans.size >= 3)
     toast('Attention : un serveur PhantomSDR-Plus limite en général à 3 auditeurs par adresse (per_ip). Au-delà, le canal peut être refusé. Lancer Orsat-Decoder sur la machine du serveur lève cette limite.', 'error');
   send({ t: 'add', mode, freq, params });
@@ -1139,7 +1193,15 @@ function toast(text, cls = '') {
 }
 function wire() {
   $('#modeSearch').addEventListener('input', renderModes);
-  $('#sourceSel').onchange = e => send({ t: 'select_source', id: e.target.value });
+  $('#sourceSel').onchange = e => {
+    const v = e.target.value;
+    if (v === '+add' || v === '+manage') {
+      e.target.value = S.current;
+      if (v === '+add') srvAdd(); else $('#settingsBtn').click();
+      return;
+    }
+    send({ t: 'select_source', id: v });
+  };
   $('#dialIn').addEventListener('keydown', e => {
     if (e.key !== 'Enter') return;
     const v = parseFloat($('#dialIn').value.replace(/\s/g, '').replace(',', '.'));
@@ -1148,7 +1210,7 @@ function wire() {
   });
   $('#srcAdd').onclick = () => {
     const type = $('#srcNewType').value;
-    const base = { phantom: { url: 'http://' }, tci: { url: 'ws://127.0.0.1:50001', trx: 0 }, audio: { device: '', rigctl: '' } }[type];
+    const base = { phantom: { url: 'http://' }, kiwi: { url: 'http://', password: '' }, owrx: { url: 'http://' }, tci: { url: 'ws://127.0.0.1:50001', trx: 0 }, audio: { device: '', rigctl: '' } }[type];
     S.sources.push({ id: Math.random().toString(36).slice(2, 8), type, name: S.types[type].split(' (')[0], ...base });
     send({ t: 'sources_set', sources: S.sources });
   };

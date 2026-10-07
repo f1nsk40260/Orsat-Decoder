@@ -24,7 +24,7 @@ from aiohttp import web, WSMsgType
 from . import VERSION_LABEL
 from .modes import BY_ID, public_catalog, default_params, bandwidth
 from .images import ImageStore
-from .sources import make_source, list_audio_inputs, TYPES
+from .sources import make_source, list_audio_inputs, detect_type, TYPES
 
 HERE = Path(__file__).resolve().parent
 WEB = HERE.parent / "web"
@@ -476,6 +476,10 @@ class App:
                 self.broadcast({"t": "sources", "sources": new, "current": self.conf["source"]})
                 if json.dumps(self.src_conf(), sort_keys=True) != old_cur:
                     await self.connect_source()
+        elif t == "detect":
+            url = str(m.get("url") or "").strip()
+            kind, name = await detect_type(self.http, url) if url else (None, None)
+            await self._send(ws, json.dumps({"t": "detected", "url": url, "type": kind, "name": name}))
         elif t == "audio_inputs":
             await self._send(ws, json.dumps({"t": "audio_inputs", "inputs": await asyncio.to_thread(list_audio_inputs)}))
         elif t == "bookmarks":

@@ -2,9 +2,9 @@
 
 ![Version](https://img.shields.io/badge/version-Beta%201.0.0-orange) ![Licence](https://img.shields.io/badge/licence-GPL--3.0-blue) ![Linux](https://img.shields.io/badge/plateforme-Linux-lightgrey)
 
-**Décodeur multimode pour Linux**, en réception uniquement. Il reçoit l'audio d'un WebSDR
-PhantomSDR / Orsat-SDR, d'un récepteur TCI ou de la carte son, et décode plusieurs canaux en même
-temps. Il sait aussi reconnaître un signal inconnu et ouvrir le bon décodeur.
+**Décodeur multimode pour Linux**, en réception uniquement. Il reçoit l'audio d'un récepteur web
+(PhantomSDR / Orsat-SDR, KiwiSDR, OpenWebRX), d'un récepteur TCI ou de la carte son, et décode
+plusieurs canaux en même temps. Il sait aussi reconnaître un signal inconnu et ouvrir le bon décodeur.
 
 ![Orsat-Decoder : trois canaux CW, PSK31 et RTTY décodés en même temps sur la bande des 40 m](docs/images/interface.jpg)
 
@@ -21,8 +21,11 @@ Désinstallation : `~/Orsat-Decoder/uninstall.sh`.
 
 - **Plus de 90 modes** en réception (tableau ci-dessous).
 - **Plusieurs canaux simultanés**, chacun avec son mode, sa fréquence, son mini-spectre et son texte.
-- **Trois sources** : PhantomSDR / Orsat-SDR (un flux audio par canal, n'importe où dans la bande),
-  TCI (audio et fréquence du récepteur), entrée audio avec CAT rigctld facultatif.
+- **Récepteurs web** : PhantomSDR / Orsat-SDR, KiwiSDR et OpenWebRX, avec un flux audio par canal,
+  accordé indépendamment dans la bande du serveur.
+- **Récepteurs locaux** : TCI (audio et fréquence du récepteur), entrée audio avec CAT rigctld facultatif.
+- **Carnet de serveurs** : on ajoute l'adresse d'un récepteur web, son type est reconnu tout seul, et il
+  reste dans la liste des sources pour les fois suivantes.
 - **Identification automatique** des signaux inconnus, confirmée par décodage.
 - **Signets** modifiables, affichés sous l'échelle du waterfall.
 - **Annuaire** de 257 signaux identifiables avec leurs fréquences connues.
@@ -53,7 +56,8 @@ Désinstallation : `~/Orsat-Decoder/uninstall.sh`.
 
 ## Utilisation
 
-1. Choisissez la source en haut à gauche.
+1. Choisissez la source en haut à gauche, ou **＋ Ajouter un serveur…** : collez l'adresse de la page
+   web du récepteur, donnez-lui un nom (et le mot de passe d'un Kiwi qui en demande un).
 2. Choisissez un mode, puis **cliquez sur un signal** dans le waterfall : un canal s'ouvre.
 3. Ou ouvrez un **signet** : avec TCI ou CAT, le récepteur est réaccordé.
 
@@ -62,6 +66,17 @@ glisser = se déplacer, glisser un marqueur = réaccorder ce canal.
 
 **Carte de canal** : mini-spectre fin pour l'accord précis, fréquence modifiable, paramètres du mode,
 pause, effacement, enregistrement du texte, écoute de l'audio du décodeur.
+
+### Récepteurs web
+
+| Serveur | Bande | À savoir |
+|---|---|---|
+| PhantomSDR / Orsat-SDR | toute la bande du serveur | souvent 3 auditeurs par adresse IP |
+| KiwiSDR | 0 à 30 MHz | 4 à 8 canaux par Kiwi ; le waterfall et chaque canal en occupent un |
+| OpenWebRX | bande du profil en cours | le second sélecteur en haut change de profil, pour tous les auditeurs du récepteur |
+
+Les WebSDR de websdr.org utilisent un format audio fermé : pour eux, écoutez dans le navigateur et
+choisissez la source **Entrée audio** sur le « Monitor » de la carte son.
 
 ### Signets
 
