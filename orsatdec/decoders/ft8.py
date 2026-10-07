@@ -1,5 +1,5 @@
-"""FT8 / FT4 : l'audio est découpé en créneaux UTC (15 s ou 7,5 s) puis décodé par ft8_lib
-(compilé avec Orsat-Decoder, dossier native/). Plusieurs signaux par créneau."""
+"""FT8 / FT4 : l'audio est découpé en créneaux UTC (15 s ou 7,5 s) puis décodé par le décodeur natif
+(dossier native/). Plusieurs signaux par créneau."""
 import os
 import re
 import subprocess
@@ -68,7 +68,7 @@ class FT8(Decoder):
             return
         if abs(self.fs - 12000) > 1:
             audio = resample_poly(audio, 12000, int(round(self.fs)))
-        # ft8_lib refuse tout fichier plus long qu'un créneau (15 s ou 7,5 s exactement) : en direct,
+        # le décodeur natif refuse tout fichier plus long qu'un créneau (15 s ou 7,5 s exactement) : en direct,
         # le créneau contient toujours quelques échantillons de trop (blocs audio de 420, 512…).
         n = int(round(self.period * 12000))
         audio = audio[:n] if len(audio) >= n else np.concatenate([audio, np.zeros(n - len(audio))])

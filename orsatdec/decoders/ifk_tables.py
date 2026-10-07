@@ -1,7 +1,6 @@
-"""Tables Varicode des modes MFSK, DominoEX et THOR, extraites telles quelles du code de fldigi
-(mfskvaricode.cxx, dominovar.cxx, thorvaricode.cxx) par un petit programme C++ compilé avec ces fichiers."""
+"""Tables Varicode des modes MFSK, DominoEX et THOR."""
 
-# Varicode IZ8BLY (MFSK, THOR primaire, DominoEX FEC) : code binaire de chaque octet 0..255
+# Varicode MFSK (MFSK, THOR primaire, DominoEX FEC) : code binaire de chaque octet 0..255
 MFSK_VARICODE = [
     "11101011100", "11101100000", "11101101000", "11101101100", "11101110000", "11101110100", "11101111000", "11101111100",
     "10101000", "11110000000", "11110100000", "11110101000", "11110101100", "10101100", "11110110000", "11110110100",
@@ -143,7 +142,7 @@ def _domino_dec():
         sym = 0
         for i, x in enumerate(reversed(nib)):
             sym |= x << (4 * i)
-        d[sym] = c if c < 256 else (c - 256) | 0x100      # comme fldigi : le dernier l'emporte
+        d[sym] = c if c < 256 else (c - 256) | 0x100      # le dernier l'emporte
     return d
 
 

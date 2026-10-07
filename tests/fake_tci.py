@@ -1,4 +1,4 @@
-"""Faux serveur TCI pour les essais : se comporte comme AetherSDR / ExpertSDR vu du client.
+"""Faux serveur TCI pour les essais : se comporte comme un récepteur TCI vu du client.
 
 Envoie l'audio de réception (float32, 12 kHz) d'une bande BLU synthétique qui dépend de la fréquence
 du VFO, et accepte les commandes vfo / modulation / audio_start.
@@ -104,7 +104,7 @@ async def handler(request):
     await ws.prepare(request)
     st = {"dial": DIAL0, "mode": "usb", "audio": False}
     air = Air()
-    await ws.send_str("protocol:ExpertSDR3,2.0;device:FakeTCI;receive_only:true;trx_count:1;channels_count:2;")
+    await ws.send_str("protocol:ExpertSDR3,2.0;device:Démo;receive_only:true;trx_count:1;channels_count:2;")
     await ws.send_str(f"vfo:0,0,{st['dial']};modulation:0,{st['mode']};ready;")
 
     async def stream():

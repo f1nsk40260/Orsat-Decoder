@@ -1,4 +1,4 @@
-"""Décodeurs Olivia et Contestia (compatibles fldigi / pj_mfsk.h de Pawel Jalocha).
+"""Décodeurs Olivia et Contestia.
 
 Principe d'émission (voir gen/olivia.py) : MFSK à « tones » tonalités espacées de bw/tones Hz, symboles en
 cosinus surélevé qui se chevauchent de moitié, codage de Gray. Un bloc FEC porte bps = log2(tones)
@@ -12,7 +12,7 @@ Réception :
     quart d'espacement de tonalité, ce qui couvre plusieurs hypothèses de décalage de fréquence ;
   * énergies normalisées par le bruit -> vraisemblances logarithmiques (LLR) des bits de chaque symbole ;
   * pour CHAQUE position temporelle (demi-symbole) et CHAQUE décalage de fréquence, décodage du bloc
-    complet par transformée de Hadamard rapide (comme MFSK_Receiver de fldigi) ;
+    complet par transformée de Hadamard rapide ;
   * la synchro de bloc et de fréquence est celle qui maximise la confiance du décodage de Walsh, cumulée sur
     les blocs voisins (avant et après : la séquence d'embrouillage rend les mauvaises phases indécodables) ;
   * silencieux : la même confiance (pic de Walsh / bruit des autres sorties) ouvre ou ferme l'affichage ;

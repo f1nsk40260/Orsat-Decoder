@@ -61,9 +61,9 @@ def build():
 
 
 def ft8_slot_audio():
-    """15 s d'audio FT8 contenant deux messages (générés par ft8_lib)."""
+    """15 s d'audio FT8 contenant deux messages (générés par le codeur natif)."""
     out = np.zeros(int(15 * AFS))
-    for msg, f, a in (("CQ F1NSK JN03", 1200, 0.3), ("F6CTE F1NSK -12", 1750, 0.15)):
+    for msg, f, a in (("CQ F1NSK JN03", 1200, 0.3), ("F4XYZ F1NSK -12", 1750, 0.15)):
         p = "/tmp/_ft8_%d.wav" % f
         subprocess.run([str(NATIVE / "gen_ft8"), msg, p, str(f)], capture_output=True)
         w = wave.open(p)

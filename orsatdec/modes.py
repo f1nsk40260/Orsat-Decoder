@@ -39,7 +39,7 @@ DIR = {"key": "reverse", "label": "Sens", "opts": [[False, "Normal"], [True, "In
 
 MODES = [
     {"id": "ident", "label": "Identifier", "family": "Identification", "kind": "ident",
-     "desc": "Cliquez sur un signal inconnu : Orsat-Decoder le reconnaît (base Artemis) et ouvre le bon mode.",
+     "desc": "Cliquez sur un signal inconnu : Orsat-Decoder le reconnaît et ouvre le bon mode.",
      "af": 1500, "bw": 2 * IDENT_SPAN,
      "params": [{"key": "seconds", "label": "Écoute", "opts": [[6.0, "6 s"], [10.0, "10 s"], [20.0, "20 s"], [30.0, "30 s"]], "def": 10.0},
                 {"key": "auto", "label": "Mode trouvé", "opts": [[True, "Ouvrir"], [False, "Proposer"]], "def": True}],
@@ -62,7 +62,7 @@ MODES = [
                                                                                    if b != 63 else 62.5, kind="qpsk"))(b)}
     for b in (31, 63, 125, 250, 500)
 ] + [
-    {"id": f"psk{b}r", "label": f"PSK{b}R", "family": "PSK", "desc": "PSK robuste de fldigi (FEC K=7, entrelacement), PSKmail." if b == 125 else "",
+    {"id": f"psk{b}r", "label": f"PSK{b}R", "family": "PSK", "desc": "PSK robuste (FEC K=7, entrelacement), PSKmail." if b == 125 else "",
      "af": 1000 if b < 1000 else 1500, "bw": int(b * 1.4) + 20,
      "make": (lambda b, dp: lambda fs, af, p: PSK(fs, af, baud=float(b), kind="pskr", depth=dp))(b, dp)}
     for b, dp in ((125, 40), (250, 80), (500, 160), (1000, 160))
@@ -89,15 +89,15 @@ MODES = [
      "af": 0, "whole": True, "kind": "msg", "crc": True, "make": lambda fs, af, p: JT(fs, "jt65", "A")},
     {"id": "jt65b", "label": "JT65B", "family": "Signaux faibles", "desc": "JT65B (VHF), créneaux d'une minute.",
      "af": 0, "whole": True, "kind": "msg", "crc": True, "make": lambda fs, af, p: JT(fs, "jt65", "B")},
-    {"id": "jt9", "label": "JT9", "family": "Signaux faibles", "desc": "JT9A, créneaux d'une minute, toute la bande audio (Fano de wsprd).",
+    {"id": "jt9", "label": "JT9", "family": "Signaux faibles", "desc": "JT9A, créneaux d'une minute, toute la bande audio (décodage de Fano).",
      "af": 0, "whole": True, "kind": "msg", "crc": True, "make": lambda fs, af, p: JT(fs, "jt9")},
-    {"id": "js8", "label": "JS8 normal", "family": "Signaux faibles", "desc": "JS8Call : créneaux de 15 s, toute la bande audio (balises, CQ, messages dirigés, texte libre).",
+    {"id": "js8", "label": "JS8 normal", "family": "Signaux faibles", "desc": "JS8 : créneaux de 15 s, toute la bande audio (balises, CQ, messages dirigés, texte libre).",
      "af": 0, "whole": True, "kind": "msg", "crc": True, "make": lambda fs, af, p: JS8(fs, "A")},
-    {"id": "js8b", "label": "JS8 rapide", "family": "Signaux faibles", "desc": "JS8Call rapide : créneaux de 10 s.",
+    {"id": "js8b", "label": "JS8 rapide", "family": "Signaux faibles", "desc": "JS8 rapide : créneaux de 10 s.",
      "af": 0, "whole": True, "kind": "msg", "crc": True, "make": lambda fs, af, p: JS8(fs, "B")},
-    {"id": "js8c", "label": "JS8 turbo", "family": "Signaux faibles", "desc": "JS8Call turbo : créneaux de 6 s.",
+    {"id": "js8c", "label": "JS8 turbo", "family": "Signaux faibles", "desc": "JS8 turbo : créneaux de 6 s.",
      "af": 0, "whole": True, "kind": "msg", "crc": True, "make": lambda fs, af, p: JS8(fs, "C")},
-    {"id": "js8e", "label": "JS8 lent", "family": "Signaux faibles", "desc": "JS8Call lent : créneaux de 30 s.",
+    {"id": "js8e", "label": "JS8 lent", "family": "Signaux faibles", "desc": "JS8 lent : créneaux de 30 s.",
      "af": 0, "whole": True, "kind": "msg", "crc": True, "make": lambda fs, af, p: JS8(fs, "E")},
 ]
 
@@ -114,7 +114,7 @@ def _bw_ifk(sr, sl, ds):
 
 MODES += [
     {"id": "mfsk-" + m[4:].lower(), "label": m, "family": "MFSK",
-     "desc": "MFSK de fldigi : FEC et entrelacement, très robuste." if m == "MFSK16" else "",
+     "desc": "MFSK : FEC et entrelacement, très robuste." if m == "MFSK16" else "",
      "af": 1500, "bw": _bw_mfsk(m), "params": [DIR],
      "make": (lambda m: lambda fs, af, p: MFSK(fs, af, mode=m, reverse=p.get("reverse", False)))(m)}
     for m in ("MFSK4", "MFSK8", "MFSK11", "MFSK16", "MFSK22", "MFSK31", "MFSK32", "MFSK64", "MFSK128")
@@ -122,7 +122,7 @@ MODES += [
     {"id": "dominoex-" + m.split()[1].lower(), "label": m, "family": "MFSK",
      "desc": "IFK+ 18 tonalités, insensible à la dérive." if m == "DominoEX 11" else "",
      "af": 1500, "bw": _bw_ifk(*DOMINO_MODES[m]),
-     "params": [{"key": "fec", "label": "FEC", "opts": [[False, "Sans"], [True, "Avec (MultiPSK)"]], "def": False}, DIR],
+     "params": [{"key": "fec", "label": "FEC", "opts": [[False, "Sans"], [True, "Avec"]], "def": False}, DIR],
      "make": (lambda m: lambda fs, af, p: DominoEX(fs, af, mode=m, fec=p.get("fec", False),
                                                    reverse=p.get("reverse", False)))(m)}
     for m in DOMINO_MODES
@@ -227,16 +227,16 @@ MODES += [
 
 MODES += [
     {"id": m.lower(), "label": m.replace("THROBX", "THROBX "), "family": "THROB",
-     "desc": "Paires de tonalités (G3PPT), très lent et très robuste." if m == "THROB1" else "",
+     "desc": "Paires de tonalités, très lent et très robuste." if m == "THROB1" else "",
      "af": 1000, "bw": 72 if m.endswith("1") or m.endswith("2") else 140, "params": [DIR],
      "make": (lambda m: lambda fs, af, p: Throb(fs, af, mode=m, reverse=p.get("reverse", False)))(m)}
     for m in ("THROB1", "THROB2", "THROB4", "THROBX1", "THROBX2", "THROBX4")
 ]
 
 MODES += [
-    {"id": "fsq", "label": "FSQ", "family": "MFSK", "desc": "FSQ de ZL1BPU (NVIS, messages dirigés « indicatif: »), toutes vitesses.",
+    {"id": "fsq", "label": "FSQ", "family": "MFSK", "desc": "FSQ (NVIS, messages dirigés « indicatif: »), toutes vitesses.",
      "af": 1500, "bw": 300, "make": lambda fs, af, p: FSQ(fs, af)},
-    {"id": "ifkp", "label": "IFKP", "family": "MFSK", "desc": "IFK+ de fldigi (33 tonalités), toutes vitesses.",
+    {"id": "ifkp", "label": "IFKP", "family": "MFSK", "desc": "IFK+ (33 tonalités), toutes vitesses.",
      "af": 1500, "bw": 390, "make": lambda fs, af, p: FSQ(fs, af, variant="ifkp")},
 ]
 
@@ -336,7 +336,7 @@ PRESETS = [
 
 
 def directory():
-    """Tous les signaux identifiables (base Artemis) : fréquences connues, et mode d'Orsat-Decoder s'il
+    """Tous les signaux identifiables : fréquences connues, et mode d'Orsat-Decoder s'il
     sait les décoder. Deux valeurs très éloignées sont une plage (3 à 30 MHz…), pas deux canaux."""
     from .signal_id import DECODABLE, load_db
     out = []

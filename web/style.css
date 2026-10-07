@@ -41,6 +41,7 @@ button { cursor: pointer; }
   background: var(--glass); backdrop-filter: blur(6px); border-bottom: 1px solid var(--line); position: relative; z-index: 30; }
 .brand { display: flex; align-items: center; gap: 9px; font-weight: 700; color: var(--gold); font-size: 16px; margin-right: 8px; }
 .brand img { width: 28px; height: 28px; }
+.brand .ver { font-size: 11px; font-weight: 600; color: var(--text); opacity: .7; border: 1px solid currentColor; border-radius: 4px; padding: 0 5px; }
 select { background: var(--night); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; max-width: 260px; }
 .conn { font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
 .conn::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
@@ -140,8 +141,7 @@ input[type=search]::placeholder { color: var(--muted); }
 .id-list { margin: 0; padding-left: 22px; display: grid; gap: 6px; }
 .id-list li::marker { color: var(--muted); font-size: 12px; }
 .id-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.id-row a { color: var(--text); text-decoration: none; }
-.id-row a:hover { color: var(--gold); text-decoration: underline; }
+.id-row .id-title { color: var(--text); }
 .id-var { font-size: 12px; color: var(--gold); border: 1px solid var(--gold-soft); border-radius: 4px; padding: 0 5px; }
 .id-bar { width: 70px; height: 5px; background: var(--raise); border-radius: 3px; overflow: hidden; margin-left: auto; }
 .id-bar i { display: block; height: 100%; background: var(--gold); }
@@ -228,8 +228,7 @@ dialog code { color: var(--text); }
 .dir-row { display: grid; grid-template-columns: minmax(150px, 230px) 1fr; gap: 10px; padding: 5px 4px; border-bottom: 1px solid #2C3C4C66; align-items: baseline; }
 .dir-row[hidden], .dir-sec[hidden] { display: none; }
 .dir-title { display: flex; flex-direction: column; min-width: 0; }
-.dir-name { text-decoration: none; overflow-wrap: anywhere; }
-.dir-name:hover { text-decoration: underline; }
+.dir-name { overflow-wrap: anywhere; }
 .dir-name.dec { color: var(--fluo); font-weight: 600; }
 .dir-name.nodec { color: #fff; }
 .dir-mode { font-size: 11px; color: var(--muted); }

@@ -1,11 +1,11 @@
-"""Briques communes aux modes multi-tonalités de fldigi : MFSK, DominoEX et THOR.
+"""Briques communes aux modes multi-tonalités : MFSK, DominoEX et THOR.
 
-- tables des sous-modes (copiées de mfsk.cxx, dominoex.cxx, thor.cxx) ;
+- tables des sous-modes ;
 - codage convolutif K=7 (ou K=15 pour les THOR rapides), décodeur de Viterbi à décisions souples ;
-- entrelaceur « diagonal » de fldigi (interleave.cxx), écrit sous forme de lignes à retard équivalentes ;
+- entrelaceur « diagonal », écrit sous forme de lignes à retard équivalentes ;
 - démodulateur de tonalités : TFD glissante sur une grille fine de fréquences, avec acquisition
   automatique de la synchro symbole et de la fréquence (± 2 écarts, 30 Hz minimum) et suivi de dérive ;
-- détection IFK+ souple (DominoEX, THOR), décodage Varicode (registre « datashreg » de fldigi)
+- détection IFK+ souple (DominoEX, THOR), décodage Varicode (registre à décalage)
   et silencieux à mémoire.
 """
 from collections import deque
@@ -66,7 +66,7 @@ K15 = (15, 0o44735, 0o63057)         # THOR 25x4, 50x1, 50x2, 100
 
 
 def gray_tx(v):
-    """« grayencode » de fldigi (misc.cxx) : donnée -> numéro de tonalité (OU exclusif cumulé)."""
+    """Codage de Gray : donnée -> numéro de tonalité (OU exclusif cumulé)."""
     b = v
     for i in range(1, 8):
         b ^= v >> i
@@ -74,7 +74,7 @@ def gray_tx(v):
 
 
 def gray_rx(t):
-    """« graydecode » de fldigi : numéro de tonalité -> donnée."""
+    """Décodage de Gray : numéro de tonalité -> donnée."""
     return t ^ (t >> 1)
 
 
@@ -84,7 +84,7 @@ def _parity(x):
 
 # ------------------------------------------------------------------ codage convolutif
 class ConvEncoder:
-    """Codeur de fldigi (viterbi.cxx) : registre « shreg = shreg<<1 | bit », 2 bits de sortie par bit,
+    """Codeur convolutif : registre « shreg = shreg<<1 | bit », 2 bits de sortie par bit,
     bit 0 = polynôme 1 (émis le premier), bit 1 = polynôme 2."""
 
     def __init__(self, k=7, p1=0x6d, p2=0x4f):
@@ -100,7 +100,7 @@ class ConvEncoder:
 class Viterbi:
     """Décodeur de Viterbi à décisions souples (rapports de vraisemblance, > 0 = bit 1).
 
-    Même convention d'états que fldigi : le bit le plus récent est en poids faible.
+    Convention d'états : le bit le plus récent est en poids faible.
     Qualité : gain de la meilleure métrique sur W pas, rapporté au gain maximal possible (somme des |LLR|).
     Un code de rendement 1/2 « explique » encore ~86 % du bruit pur ; un signal décodable donne > 92 %.
     La valeur est retardée pour correspondre aux bits qui sortent du décodeur."""
@@ -181,7 +181,7 @@ def soft_bits(L, mask):
 
 # ------------------------------------------------------------------ entrelaceur
 class Interleaver:
-    """Entrelaceur de fldigi (interleave.cxx). Pour un symbole de `size` bits et `depth` étages, il équivaut
+    """Entrelaceur diagonal. Pour un symbole de `size` bits et `depth` étages, il équivaut
     exactement à des lignes à retard : à l'émission le bit i est retardé de i*depth symboles, à la réception
     de (size-1-i)*depth symboles. Contenu initial : 0 à l'émission, poinçonnage (LLR nul) à la réception."""
 
@@ -220,7 +220,7 @@ class Interleaver:
 
 # ------------------------------------------------------------------ Varicode
 class VariShreg:
-    """Registre de décodage Varicode IZ8BLY de fldigi : un caractère se termine sur la suite « 001 »."""
+    """Registre de décodage Varicode MFSK : un caractère se termine sur la suite « 001 »."""
 
     def __init__(self, table):
         self.table = table
@@ -263,7 +263,7 @@ class TextOut:
     def put(self, ch, open_):
         if ch is None:
             return ""
-        if ch == "\r":                  # LF de fldigi : saut de ligne seulement s'il n'y a pas eu de CR
+        if ch == "\r":                  # LF : saut de ligne seulement s'il n'y a pas eu de CR
             if self.last == "\n":
                 return ""
             ch = "\n"
@@ -416,7 +416,7 @@ class ToneDemod:
             E = E / noise
             met = E[:, self.idx].max(axis=2)           # (J, Q)
             if self.low_tone:
-                # préambule MFSK de fldigi : la tonalité la plus basse seule. À égalité entre peignes, on
+                # préambule MFSK : la tonalité la plus basse seule. À égalité entre peignes, on
                 # préfère celui dont la tonalité forte est en première place (léger bonus)
                 met = met + 0.02 * E[:, self.idx[:, 0]]
             self.nsym += 1
@@ -501,7 +501,7 @@ class IFKDiff:
         c = np.arange(16)
         self.idx = (p[None, :] + c[:, None] + 2) % IFK_TONES      # (16, 18)
         self.prev = None
-        # bits de c, dans l'ordre d'émission (poids fort d'abord), comme decodesymbol() de fldigi
+        # bits de c, dans l'ordre d'émission (poids fort d'abord)
         self.bits = np.array([[(v >> (3 - k)) & 1 for v in range(16)] for k in range(4)], bool)
 
     def metric(self, lt):

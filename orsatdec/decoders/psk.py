@@ -1,9 +1,9 @@
-"""Décodeur PSK (compatible fldigi) : BPSK (PSK31 à PSK1000), QPSK (QPSK31 à QPSK500) et PSK-R (PSK125R à
+"""Décodeur PSK : BPSK (PSK31 à PSK1000), QPSK (QPSK31 à QPSK500) et PSK-R (PSK125R à
 PSK1000R, avec FEC). Mélange, filtrage, synchro symbole de Gardner, détection différentielle et CAF.
 
 - BPSK : Varicode PSK31, une absence d'inversion de phase vaut 1 ;
 - QPSK : code convolutif K=5 (0x17, 0x19) décodé par Viterbi à décisions souples, Varicode PSK31 ;
-- PSK-R : BPSK + code K=7 (0x6d, 0x4f) + entrelaceur 2x2xN de fldigi + Varicode MFSK ; l'alignement des
+- PSK-R : BPSK + code K=7 (0x6d, 0x4f) + entrelaceur 2x2xN + Varicode MFSK ; l'alignement des
   paires de bits est inconnu : deux décodeurs tournent, décalés d'un bit, et le meilleur parle.
 """
 import numpy as np
@@ -171,7 +171,7 @@ class PSK(Decoder):
     # ------------------------------------------------------------------ QPSK
     def _qpsk(self, d, text):
         # phase différentielle -> dibit émis s (bit 0 : polynôme 1, bit 1 : polynôme 2) :
-        # Δφ = π + s'·π/2 avec s' = (4 - s) & 3 (convention fldigi, sens normal)
+        # Δφ = π + s'·π/2 avec s' = (4 - s) & 3 (sens normal)
         u = d * np.exp(-1j * np.pi) / (abs(d) + 1e-15)          # u = exp(j s' π/2)
         a = max(abs(d), 1e-12)
         self.amp += 0.02 * (a - self.amp)

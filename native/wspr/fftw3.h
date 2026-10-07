@@ -1,4 +1,4 @@
-/* Orsat-Decoder : remplace FFTW par kiss_fft (fourni avec ft8_lib) pour wsprd, sans dépendance externe. */
+/* Orsat-Decoder : remplace FFTW par kiss_fft (dossier native/ft8) pour wsprd, sans dépendance externe. */
 #pragma once
 #include <stdio.h>
 #include <stdlib.h>

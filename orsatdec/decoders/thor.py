@@ -1,4 +1,4 @@
-"""Décodeur THOR (THOR 4 à THOR 100, compatible fldigi) : modulation IFK+ à 18 tonalités, code convolutif
+"""Décodeur THOR (THOR 4 à THOR 100) : modulation IFK+ à 18 tonalités, code convolutif
 (K=7, ou K=15 pour 25x4, 50x1, 50x2 et 100) avec entrelaceur, Varicode MFSK.
 
 La détection est non cohérente et souple : chaque quartet est estimé à partir des énergies des deux

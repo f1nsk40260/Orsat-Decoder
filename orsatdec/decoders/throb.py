@@ -1,4 +1,4 @@
-"""THROB et THROBX (G3PPT, compatibles fldigi) : chaque caractère est une paire de tonalités (ou une seule)
+"""THROB et THROBX : chaque caractère est une paire de tonalités (ou une seule)
 parmi 9 (THROB) ou 11 (THROBX), émise pendant un symbole d'environ 1, 0,5 ou 0,25 s.
 
 La bande de base est ramenée à 250 Hz ; chaque symbole est corrélé aux tonalités (avec la forme
@@ -29,7 +29,7 @@ XCHARS = "\0 ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890,.'/)(#\"+-;:?!@=\n"
 THROB_MODES = {"THROB1": (8192, NAR, "semi", False), "THROB2": (4096, NAR, "semi", False),
                "THROB4": (2048, WID, "full", False), "THROBX1": (8192, XNAR, "semi", True),
                "THROBX2": (4096, XNAR, "semi", True), "THROBX4": (2048, XWID, "full", True)}
-FR = 250.0                                   # cadence de la bande de base (8000 / 32, comme fldigi)
+FR = 250.0                                   # cadence de la bande de base (8000 / 32)
 
 
 def pulse(n, kind):

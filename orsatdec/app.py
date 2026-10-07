@@ -21,7 +21,7 @@ from pathlib import Path
 import numpy as np
 from aiohttp import web, WSMsgType
 
-from . import __version__
+from . import VERSION_LABEL
 from .modes import BY_ID, public_catalog, default_params, bandwidth
 from .images import ImageStore
 from .sources import make_source, list_audio_inputs, TYPES
@@ -524,7 +524,7 @@ class App:
 
     async def hello(self, ws):
         await self._send(ws, json.dumps({
-            "t": "hello", "version": __version__, "catalog": public_catalog(), "types": TYPES,
+            "t": "hello", "version": VERSION_LABEL, "catalog": public_catalog(), "types": TYPES,
             "sources": self.conf["sources"], "current": self.conf["source"],
             "source": self.src.summary() if self.src else {}, "ui": self.conf.get("ui", {}),
             "bookmarks": self.conf.get("bookmarks", []),
@@ -604,7 +604,7 @@ async def main_async(args):
         open_window(url, args)
         await app.http.close()
         return
-    log.info("Orsat-Decoder %s : %s", __version__, url)
+    log.info("Orsat-Decoder %s : %s", VERSION_LABEL, url)
     await app.connect_source()
     tasks = [asyncio.create_task(app.idle_watch()), asyncio.create_task(app.audio_watch())]
     browser = open_window(url, args)
@@ -634,8 +634,9 @@ def main():
     ap.add_argument("--probe", nargs="+", metavar=("ADRESSE", "FREQ_KHZ"),
                     help="diagnostic : se connecte à un serveur PhantomSDR, mesure l'audio reçu et l'enregistre")
     ap.add_argument("--identify", nargs="+", metavar=("FICHIER.wav", "FREQ_KHZ"),
-                    help="identifie le signal d'un enregistrement audio (base Artemis / sigidwiki)")
+                    help="identifie le signal d'un enregistrement audio (base de signaux intégrée)")
     ap.add_argument("-v", "--verbose", action="store_true")
+    ap.add_argument("--version", action="version", version=f"Orsat-Decoder {VERSION_LABEL} — F1NSK et Claude AI — GPL-3")
     args = ap.parse_args()
     if args.identify:
         from .signal_id import identify_file

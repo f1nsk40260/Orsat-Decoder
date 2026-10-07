@@ -41,6 +41,7 @@ const send = o => { if (S.ws && S.ws.readyState === 1) S.ws.send(JSON.stringify(
 
 const H = {
   hello(m) {
+    if (m.version) { $('#ver').textContent = m.version; document.title = `Orsat-Decoder ${m.version}`; }
     S.catalog = m.catalog; S.byId = Object.fromEntries(m.catalog.modes.map(x => [x.id, x]));
     S.types = m.types; S.sources = m.sources; S.current = m.current;
     Object.assign(S.ui, m.ui || {}); S.mode = S.ui.mode || 'psk31';
@@ -244,14 +245,13 @@ function renderPresets() {
     mine.append(row);
   }
   sections.push(mine);
-  // 2. tous les signaux identifiables de la base Artemis (on peut en faire des signets)
-  const all = el('div', { class: 'dir-sec' }, el('div', { class: 'grp', text: `Signaux identifiables (base Artemis, ${(S.catalog.directory || []).length})` }));
+  // 2. tous les signaux identifiables de la base (on peut en faire des signets)
+  const all = el('div', { class: 'dir-sec' }, el('div', { class: 'grp', text: `Signaux identifiables (${(S.catalog.directory || []).length})` }));
   for (const d of S.catalog.directory || []) {
     const dec = !!d.mode;
     const mode = dec ? d.mode : 'ident';
     const ml = dec ? (S.byId[d.mode]?.label || d.mode) : '';
-    const name = el('a', { class: 'dir-name ' + (dec ? 'dec' : 'nodec'), href: `https://www.sigidwiki.com/index.php?curid=${d.id}`,
-      target: '_blank', rel: 'noopener', title: 'Fiche sigidwiki', text: d.title });
+    const name = el('span', { class: 'dir-name ' + (dec ? 'dec' : 'nodec'), text: d.title });
     const freqs = el('span', { class: 'dir-freqs' });
     for (const f of d.freqs) {
       freqs.append(el('span', { class: 'fpair' },
@@ -622,7 +622,9 @@ function toggleMap(c) {
   if (!window.L) { div.textContent = 'Bibliothèque de carte absente (web/vendor/leaflet).'; return; }
   if (!c.map) {
     c.map = L.map(div, { worldCopyJump: true, minZoom: 1 }).setView([40, 0], 2);
-    // fond hors ligne (pays Natural Earth, embarqué) : la carte reste lisible sans Internet
+    c.map.attributionControl.setPrefix(false);
+    c.map.attributionControl.setPrefix(false);
+    // fond hors ligne (pays, embarqué) : la carte reste lisible sans Internet
     c.map.createPane('world').style.zIndex = 150;
     fetch('vendor/world/countries-110m.json').then(r => r.json()).then(g => {
       L.geoJSON(g, { pane: 'world', interactive: false,
@@ -631,7 +633,7 @@ function toggleMap(c) {
     // fond détaillé OpenStreetMap (sans clé), assombri ; s'il ne charge pas, le fond hors ligne reste visible
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 12, className: 'osm-dark',
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">contributeurs OpenStreetMap</a> · Natural Earth',
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">contributeurs OpenStreetMap</a>',
     }).addTo(c.map);
     c.mk = { planes: new Map(), heard: new Map(), gs: new Map() };
     c.mapLayer = L.layerGroup().addTo(c.map);
@@ -775,7 +777,7 @@ function renderIdent(c, m) {
   } else if (m.candidates.length) {
     out.append(el('p', { class: 'id-none', text: m.candidates.some(x => x.decodable)
       ? 'Aucun décodeur n\'a confirmé : voici les signaux les plus ressemblants.'
-      : 'Signal que Orsat-Decoder ne décode pas : voici les plus ressemblants de la base Artemis.' }));
+      : 'Signal que Orsat-Decoder ne décode pas : voici les plus ressemblants.' }));
   }
   if (!m.candidates.length) return;
   const top = Math.max(...m.candidates.map(x => x.score)), low = Math.min(...m.candidates.map(x => x.score), top - 3);
@@ -784,7 +786,7 @@ function renderIdent(c, m) {
     const pct = Math.max(4, Math.round((k.score - low) / (top - low || 1) * 100));
     const li = el('li', {},
       el('div', { class: 'id-row' },
-        el('a', { href: k.url, target: '_blank', rel: 'noopener', text: k.title, title: 'Fiche sigidwiki' }),
+        el('span', { class: 'id-title', text: k.title }),
         k.variant ? el('span', { class: 'id-var', text: k.variant.label }) : null,
         el('span', { class: 'id-bar', title: `note ${k.score}` }, el('i', { style: `width:${pct}%` })),
         k.open ? el('button', { class: 'icon-btn small', type: 'button', text: 'Ouvrir', title: 'Ouvrir un canal dans ce mode',

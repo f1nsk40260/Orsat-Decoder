@@ -8,8 +8,7 @@ Chronologie : chaque impulsion de synchro est repérée (filtre adapté) autour 
 une droite des moindres carrés (avec rejet des valeurs aberrantes) donne la durée exacte de ligne
 — correction de pente — et l'origine. Les lignes sont échantillonnées sur ce modèle ; quand il
 s'affine, les lignes déjà envoyées sont recalculées et renvoyées si elles ont changé.
-Couleur : RVB direct (Martin, Scottie, Wraase), YCbCr pleine échelle (JFIF) pour Robot et PD,
-comme slowrx / PySSTV.
+Couleur : RVB direct (Martin, Scottie, Wraase), YCbCr pleine échelle (JFIF) pour Robot et PD.
 """
 import numpy as np
 

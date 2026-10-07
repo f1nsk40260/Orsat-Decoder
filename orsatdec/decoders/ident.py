@@ -7,13 +7,11 @@ candidats d'abord (en une seconde environ), confirmation par décodage ensuite.
 "open" décrit le canal à ouvrir : mode, paramètres, et position du signal dans l'audio (af, Hz).
 """
 import threading
-import urllib.parse
 
 import numpy as np
 
 from ..dsp import Decoder
 
-SIGID_URL = "https://www.sigidwiki.com/wiki/"
 SPAN = 1450.0          # Hz analysés de part et d'autre du clic
 
 
@@ -24,8 +22,7 @@ def _clean(m):
 
 def _cand(c):
     return {"id": c["id"], "title": c["title"], "score": c["score"], "why": c["why"],
-            "decodable": c["decodable"], "variant": c.get("variant"),
-            "url": SIGID_URL + urllib.parse.quote(c["title"].replace(" ", "_"), safe=":/()'")}
+            "decodable": c["decodable"], "variant": c.get("variant")}
 
 
 class Identifier(Decoder):

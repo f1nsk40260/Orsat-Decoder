@@ -748,7 +748,7 @@ def hfdl_spdu(gid, mask):
 
 
 def hfdl_encode(frames, fs=12000, af=1440.0, foff=7.0, amp=0.5, gap=0.6):
-    """[(PDU, M1)] -> audio USB (sous-porteuse 1440 Hz), symboles mis en forme par le filtre de dumphfdl."""
+    """[(PDU, M1)] -> audio USB (sous-porteuse 1440 Hz), symboles mis en forme par le filtre d'émission."""
     from scipy.signal import resample_poly
     from ..decoders.hfdl import MF, frame_symbols
     out = [np.zeros(int(gap * fs))]

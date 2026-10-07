@@ -1,4 +1,4 @@
-"""Banc d'essai des modes MFSK, DominoEX et THOR (mires conformes à fldigi, bruit blanc, convention 2500 Hz).
+"""Banc d'essai des modes MFSK, DominoEX et THOR (bruit blanc, convention 2500 Hz).
 
 Pour chaque sous-mode : taux de caractères corrects à plusieurs S/B, S/B le plus bas avec >= 90 %,
 acquisition avec un clic décalé, dérive de 1 Hz/s, bruit seul (60 s) et vitesse (x temps réel, temps CPU).
@@ -83,8 +83,6 @@ CASES = ([Case("MFSK", m) for m in MFSK_MODES if not m.endswith("L")]
          + [Case("DominoEX", m, fec=True) for m in ("DominoEX 8", "DominoEX 11", "DominoEX 16", "DominoEX 22")]
          + [Case("THOR", m) for m in THOR_MODES])
 
-# MultiPSK (documentation, « lowest S/N ») pour comparaison, quand connu
-MULTIPSK = {"MFSK16": -13.5}
 
 
 def decode(case, x, af=AF):
@@ -151,9 +149,7 @@ def main():
         res, lowest, speed = sweep(c, quick)
         line = " ".join(f"{s:+d}:{v:.0%}" for s, v in res)
         print(f"{c.label:<16} {line}")
-        ref = MULTIPSK.get(c.label)
-        print(f"{'':<16} seuil 90 % : {lowest if lowest is not None else '?'} dB"
-              + (f" (MultiPSK {ref} dB)" if ref is not None else "") + f"   vitesse x{speed:.0f}")
+        print(f"{'':<16} seuil 90 % : {lowest if lowest is not None else '?'} dB" + f"   vitesse x{speed:.0f}")
         row = [c.label, lowest, speed]
         if not quick and lowest is not None:
             snr = lowest + 4

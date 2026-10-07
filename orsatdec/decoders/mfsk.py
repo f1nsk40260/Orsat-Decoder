@@ -1,5 +1,5 @@
-"""Décodeur MFSK (MFSK4 à MFSK128, compatible fldigi) : tonalités codées en Gray, entrelaceur diagonal,
-code convolutif K=7 r=1/2 décodé par Viterbi à décisions souples, Varicode IZ8BLY.
+"""Décodeur MFSK (MFSK4 à MFSK128) : tonalités codées en Gray, entrelaceur diagonal,
+code convolutif K=7 r=1/2 décodé par Viterbi à décisions souples, Varicode MFSK.
 
 Les images MFSK (en-tête « Pic:LxH... ») ne sont pas affichées : le décodeur signale l'image et se tait
 pendant sa durée au lieu d'imprimer des caractères parasites.

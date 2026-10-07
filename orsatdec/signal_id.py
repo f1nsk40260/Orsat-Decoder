@@ -1,4 +1,4 @@
-"""Identification automatique des signaux (d'après la base Artemis / sigidwiki).
+"""Identification automatique des signaux à partir de la base de signaux intégrée.
 
 Trois étages :
   1. measure()  : mesures sur quelques secondes d'audio BLU — largeur occupée, nombre de tonalités et
@@ -10,7 +10,7 @@ Trois étages :
   3. confirm()  : fait tourner les décodeurs d'Orsat-Decoder des candidats décodables et garde celui
                   qui sort un texte lisible (la preuve la plus sûre).
 
-La base est générée par tools/make_sigid.py à partir d'Artemis-DB (GPL-3, données sigidwiki).
+La base est générée par tools/make_sigid.py.
 """
 import json
 import re
@@ -20,7 +20,7 @@ import numpy as np
 
 DATA = Path(__file__).resolve().parent / "data" / "sigid.json"
 
-# signaux Artemis (pageid) qu'Orsat-Decoder sait décoder -> mode et paramètres à essayer
+# signaux de la base (identifiant) qu'Orsat-Decoder sait décoder -> mode et paramètres à essayer
 DECODABLE = {
     140: [("psk31", {}), ("psk63", {}), ("psk125", {})],
     197: [("rtty", {"baud": b, "shift": s, "reverse": r}) for b in (45.45, 50.0, 75.0)

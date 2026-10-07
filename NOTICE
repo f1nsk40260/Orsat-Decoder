@@ -1,0 +1,20 @@
+Orsat-Decoder Beta 1.0.0
+Copyright (C) 2026 F1NSK et Claude AI
+Licence : GNU GPL version 3 ou ultérieure (fichier LICENSE).
+
+Avis de licence obligatoires
+----------------------------
+Les licences ci-dessous exigent que ces mentions accompagnent toute copie du logiciel.
+
+- native/ft8 : Copyright (c) 2018 Kārlis Goba — licence MIT (native/ft8/LICENSE).
+- native/wspr : Copyright (C) Joseph Taylor K1JT, Steven Franke K9AN et contributeurs — GPL-3
+  (native/wspr/LICENSE).
+- web/vendor/leaflet : Copyright (c) 2010-2023 Volodymyr Agafonkin et (c) 2010-2011 CloudMade —
+  licence BSD-2 (web/vendor/leaflet/LICENSE).
+- web/vendor/world : Copyright 2013-2019 Michael Bostock — licence ISC (web/vendor/world/LICENSE).
+- Tables, constantes et algorithmes repris de logiciels sous GPL-3 ou LGPL et réécrits pour
+  Orsat-Decoder : fldigi (W1HKJ et contributeurs), dumphfdl (Tomasz Lemiesz), JS8Call (Jordan
+  Sherer KN4CRD), WSJT-X (K1JT et contributeurs), acarsdec (Thierry Leconte, LGPL).
+- orsatdec/data/sigid.json : dérivé d'Artemis-DB (GPL-3).
+- Fond de carte en ligne : © contributeurs OpenStreetMap (mention affichée sur la carte, exigée par
+  les conditions d'utilisation des tuiles).

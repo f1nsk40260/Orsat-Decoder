@@ -1,6 +1,6 @@
-"""WSPR (K1JT) : balises de propagation, créneaux de 2 minutes (minutes paires UTC), 4-FSK à 1,46 baud dans
-200 Hz autour de 1500 Hz, code convolutif K=32 décodé par Fano. Le décodage est fait par wsprd (K1JT, K9AN,
-VA2GKA, GPL-3), compilé avec Orsat-Decoder (dossier native/wspr). L'audio du créneau est ramené en bande de
+"""WSPR : balises de propagation, créneaux de 2 minutes (minutes paires UTC), 4-FSK à 1,46 baud dans
+200 Hz autour de 1500 Hz, code convolutif K=32 décodé par Fano. Le décodage est fait par le décodeur
+natif (dossier native/wspr). L'audio du créneau est ramené en bande de
 base à 375 Hz (1500 Hz -> 0 Hz) puis confié au décodeur natif."""
 import logging
 import os
@@ -44,7 +44,7 @@ def decode_iq(z, binary=None, conj=False):
     z = z / peak * 0.5
     iq = np.empty(2 * len(z), np.float32)
     iq[0::2], iq[1::2] = z.real, z.imag
-    with tempfile.TemporaryDirectory() as d:          # wsprd écrit un fichier dans le dossier courant
+    with tempfile.TemporaryDirectory() as d:          # le décodeur écrit un fichier dans le dossier courant
         p = Path(d) / "slot.iq"
         iq.tofile(p)
         r = subprocess.run([str(binary), str(p)], capture_output=True, text=True, timeout=90, cwd=d)

@@ -1,7 +1,7 @@
 """HFDL (ARINC 635 / 753) : liaison de données HF des avions et de 16 stations au sol, en USB sur une
 sous-porteuse de 1440 Hz, 1800 symboles/s (BPSK, QPSK, 8PSK ; 300 à 1800 bits/s).
 
-Couche physique d'après dumphfdl (Tomasz Lemiesz, GPL-3), réécrite en numpy :
+Couche physique (numpy) :
 - trame : pré-clé, deux séquences A (127 symboles BPSK), séquence M1 (127, son décalage donne le débit
   et la longueur 1 ou 2 créneaux), M2, 9 séquences d'apprentissage T, puis 72 ou 168 segments de
   30 symboles de données suivis chacun d'une séquence T ;

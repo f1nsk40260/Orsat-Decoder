@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # =====================================================================================
-#  Orsat-Decoder — installation sous Linux
+#  Orsat-Decoder (Beta 1.0.0) — installation sous Linux
+#  F1NSK et Claude AI — licence GPL-3 (fichier LICENSE)
 #
 #  Usage :  ./install.sh
 #  Relancer install.sh met à jour Orsat-Decoder en gardant la configuration et les canaux.
@@ -54,7 +55,7 @@ if [ "$(cd "$APPDIR" && pwd -P)" != "$(cd "$HERE" && pwd -P)" ]; then
     rm -rf "$APPDIR/$d"
     mv "$APPDIR/$d.new" "$APPDIR/$d"
   done
-  for f in install.sh get.sh uninstall.sh README.md .gitignore; do
+  for f in install.sh get.sh uninstall.sh README.md LICENSE NOTICE .gitignore; do
     [ -f "$HERE/$f" ] && cp "$HERE/$f" "$APPDIR/$f"
   done
 fi
@@ -71,7 +72,7 @@ fi
 info "Installé dans $APPDIR"
 
 # -------------------------------------------------------------------------------------
-step "3/5  Décodeurs natifs (ft8_lib)"
+step "3/5  Décodeurs natifs"
 "$APPDIR/native/build.sh" >"$APPDIR/build.log" 2>&1 || { tail -20 "$APPDIR/build.log"; fail "compilation des décodeurs natifs."; }
 info "$(tail -1 "$APPDIR/build.log")"
 

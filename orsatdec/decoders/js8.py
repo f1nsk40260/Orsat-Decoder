@@ -1,11 +1,10 @@
-"""JS8 (JS8Call, KN4CRD) : messagerie en 8-FSK dérivée de FT8, créneaux de 15 s (normal), 10 s (rapide),
+"""JS8 : messagerie en 8-FSK dérivée de FT8, créneaux de 15 s (normal), 10 s (rapide),
 6 s (turbo) ou 30 s (lent). 79 symboles : trois matrices de Costas 7x7 encadrent 58 symboles de
 données (29 de parité puis 29 de message), code LDPC (174, 87), 75 bits utiles + CRC-12.
 
-Les 72 bits de message forment des trames JS8Call : balise (@HB) ou CQ, indicatif composé, message
+Les 72 bits de message forment des trames JS8 : balise (@HB) ou CQ, indicatif composé, message
 dirigé (indicatif, destinataire, commande), données en texte libre compressées (dictionnaire JSC de
-262 144 mots) ou en Huffman. Les tables (matrices de Costas, code LDPC, alphabets, commandes,
-dictionnaire JSC) viennent des sources de JS8Call (GPL-3) ; le décodeur est écrit pour Orsat-Decoder.
+262 144 mots) ou en Huffman.
 """
 import logging
 import lzma
@@ -308,7 +307,7 @@ def fmt_snr(snr):
 
 
 def frame_text(bits72, i3):
-    """72 bits + type -> (texte, nature) comme JS8Call."""
+    """72 bits + type -> (texte, nature)."""
     b = [int(x) for x in bits72]
     if i3 & DATA:
         return jsc_decompress(_unpad(b)), "data"

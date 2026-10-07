@@ -58,15 +58,15 @@ def check_ft8():
 
 
 def check_wspr():
-    """WSPR : deux balises à -24 dB dans un créneau de 2 minutes, décodées par wsprd (native/)."""
+    """WSPR : deux balises à -24 dB dans un créneau de 2 minutes, décodées par le décodeur natif."""
     if not (ROOT / "native" / "bin" / "wspr_decode_iq").exists():
         print("  ÉCHEC  WSPR       décodeur natif absent (native/build.sh)")
         return False
     from orsatdec.gen.utility import wspr_encode
     from orsatdec.decoders.wspr import to_iq, decode_iq
-    x = add_noise(wspr_encode([("F1NSK JN03 30", -20, 1.0), ("K1JT FN20 37", 45, 1.0)]), -24, FS, seed=3)
+    x = add_noise(wspr_encode([("F1NSK JN03 30", -20, 1.0), ("F4XYZ JN18 37", 45, 1.0)]), -24, FS, seed=3)
     got = {m["call"] for m in decode_iq(to_iq(x, FS))}
-    ok = {"F1NSK", "K1JT"} <= got
+    ok = {"F1NSK", "F4XYZ"} <= got
     print(f"  {'OK ' if ok else 'ÉCHEC'}  WSPR        -24 dB   {len(got)} balise(s) décodée(s)")
     return ok
 
@@ -87,7 +87,7 @@ def check_jt():
     from orsatdec.decoders import jt as J
     ok = True
     for kind in ("jt65", "jt9"):
-        msgs = ["CQ F1NSK JN03", "K1JT F1NSK -15"]
+        msgs = ["CQ F1NSK JN03", "F4XYZ F1NSK -15"]
         x = add_noise(J.jt_audio(kind, [(1270.0, msgs[0]), (1500.0, msgs[1])]), -18, FS, seed=4)
         got = [d["text"] for d in J.decode_window(x, FS, kind)]
         good = sorted(got) == sorted(msgs)

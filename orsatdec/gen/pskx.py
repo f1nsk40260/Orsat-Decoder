@@ -1,4 +1,4 @@
-"""Mires PSK de fldigi au-delà du BPSK : QPSK (K=5) et PSK-R (K=7 + entrelaceur), pour les tests."""
+"""Mires PSK au-delà du BPSK : QPSK (K=5) et PSK-R (K=7 + entrelaceur), pour les tests."""
 import numpy as np
 
 from ..tables import VARICODE
@@ -9,7 +9,7 @@ TAU = 2 * np.pi
 
 
 def modulate(deltas, fs, af, baud, amp=0.5):
-    """Suite de sauts de phase (rad) -> signal, transitions en cosinus surélevé comme fldigi."""
+    """Suite de sauts de phase (rad) -> signal, transitions en cosinus surélevé."""
     sps = fs / baud
     n = int(len(deltas) * sps)
     base = np.zeros(n, np.complex128)

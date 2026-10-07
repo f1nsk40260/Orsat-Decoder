@@ -2,7 +2,7 @@
 
 Mesures : PSNR de l'image décodée contre l'original à plusieurs S/B (bruit dans 2500 Hz), décalage
 d'accord, erreur d'horloge (pente), départ manqué (roue libre), disparition du signal en cours d'image,
-bruit seul, vitesse. Pour la SSTV, le décodeur est aussi validé avec un codeur indépendant (PySSTV).
+bruit seul, vitesse. Pour la SSTV, le décodeur est aussi validé avec un codeur indépendant.
 Les images décodées sont enregistrées (PNG, Pillow) dans IMG_DIR pour inspection visuelle.
 
     /tmp/claude-0/venv/bin/python tests/test_images.py [fax|sstv|hell]
@@ -190,7 +190,7 @@ def sstv_case(mode, snr=30.0, off=0.0, ppm=0.0, enc="orsat", cut=None, seed=5):
     if img.shape[0] < m["h"]:
         img = np.concatenate([img, np.zeros((m["h"] - img.shape[0],) + img.shape[1:], np.uint8)])
     if enc != "orsat" and pysstv_width(mode) != m["w"]:
-        # PySSTV émet Martin M2 / Scottie S2 sur 160 points : même image de référence ré-échantillonnée
+        # le codeur externe émet Martin M2 / Scottie S2 sur 160 points : même image de référence ré-échantillonnée
         from PIL import Image
         ref = np.array(Image.fromarray(ref).resize((pysstv_width(mode), m["h"]), Image.BILINEAR)
                        .resize((m["w"], m["h"]), Image.NEAREST))
@@ -203,7 +203,7 @@ def pysstv_width(mode):
 
 def test_sstv():
     print("== SSTV : PSNR (dB) image décodée / originale, 30 dB de S/B")
-    print("  mode           codeur Orsat   PySSTV")
+    print("  mode           codeur Orsat   externe")
     py_modes = {"martin1", "martin2", "scottie1", "scottie2", "scottiedx", "robot36", "pd90", "pd120", "pd180",
                 "sc2_180", "pd160", "pd240", "pd290"}
     speeds = []
@@ -219,7 +219,7 @@ def test_sstv():
             save_png(f"sstv_{mode}_pysstv.png", img2 if img2 is not None else np.zeros((2, 2, 3)))
         print(f"  {SSTV_MODES[mode]['name']:<15} {p1:6.1f}        {p2}")
     print(f"  vitesse : x{min(speeds):.0f} à x{max(speeds):.0f} temps réel")
-    print("== SSTV : PSNR selon le S/B (codeur Orsat / PySSTV)")
+    print("== SSTV : PSNR selon le S/B (codeur Orsat / externe)")
     snrs = (30, 15, 10, 5, 0, -5)
     print("  mode           " + "".join(f"{s:>12}" for s in snrs))
     for mode in ("martin1", "scottie1", "robot36", "pd120"):

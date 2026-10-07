@@ -1,5 +1,5 @@
 """Hellschreiber : Feld Hell (AM, 122,5 bauds, 17,5 colonnes/s de 14 points), Slow Hell, Hell X5 / X9,
-FSK Hell 245 / 105 et Hell 80 (FSK), d'après fldigi (src/feld).
+FSK Hell 245 / 105 et Hell 80 (FSK).
 
 Le Hell n'a ni synchro ni code : le récepteur « imprime » simplement l'intensité du signal, colonne par
 colonne, et c'est l'œil qui lit. Chaque colonne est échantillonnée à 2 points par point émis
@@ -17,7 +17,7 @@ import numpy as np
 from ..dsp import Decoder, Mixer, FirDecim, lowpass, ToneFinder
 from .wefax import box_sample, b64
 
-# Police « Feld 7x7-14 » de fldigi (feld/Feld7x7-14.cxx) : 14 rangées de haut en bas, bit 15 = 1re colonne
+# Police « Feld 7x7-14 » : 14 rangées de haut en bas, bit 15 = 1re colonne
 FELD7X7_14 = {
     ' ': (0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000),
     '!': (0x0000, 0x0000, 0x8000, 0x8000, 0x8000, 0x8000, 0x8000, 0x8000, 0x0000, 0x0000, 0x8000, 0x8000, 0x0000, 0x0000),

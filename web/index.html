@@ -11,7 +11,7 @@
 <body>
 <div id="app">
   <header id="bar">
-    <div class="brand"><img src="icon.svg" alt=""><span>Orsat-Decoder</span></div>
+    <div class="brand"><img src="icon.svg" alt=""><span>Orsat-Decoder</span><span id="ver" class="ver"></span></div>
 
     <label class="pick" title="Source du signal : serveur PhantomSDR, TCI ou entrée audio">
       <span class="pick-lbl">Source</span>
@@ -28,7 +28,7 @@
     <div class="spacer"></div>
 
     <div class="menu-wrap">
-      <button id="presetBtn" class="btn" title="Signets : vos fréquences, et les signaux de la base Artemis">Signets</button>
+      <button id="presetBtn" class="btn" title="Signets : vos fréquences et les signaux identifiables">Signets</button>
       <div id="presetMenu" class="menu" hidden></div>
     </div>
     <button id="settingsBtn" class="icon-btn" title="Réglages" aria-label="Réglages">

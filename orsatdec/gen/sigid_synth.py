@@ -1,8 +1,8 @@
-"""Mires des sous-modes que sait décoder Orsat-Decoder, pour compléter les empreintes de la base Artemis.
+"""Mires des sous-modes que sait décoder Orsat-Decoder, pour compléter les empreintes de la base.
 
-Chaque page sigidwiki n'a qu'un enregistrement (PSK31 pour « PSK », Olivia 16/500 pour « Olivia »…) ;
+Chaque fiche n'a qu'un enregistrement (PSK31 pour « PSK », Olivia 16/500 pour « Olivia »…) ;
 on ajoute ici l'empreinte des autres variantes courantes, mesurée sur nos propres générateurs.
-SYNTH : pageid Artemis -> [(étiquette, mode Orsat, paramètres, fabrique (texte, fs, af) -> audio)].
+SYNTH : identifiant de fiche -> [(étiquette, mode Orsat, paramètres, fabrique (texte, fs, af) -> audio)].
 """
 from .encoders import psk_encode, rtty_encode, cw_encode, sitorb_encode, navtex_message
 from .mfsk import mfsk_encode, dominoex_encode, thor_encode

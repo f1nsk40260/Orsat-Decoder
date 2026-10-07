@@ -1,4 +1,4 @@
-"""FSQ et IFKP (ZL1BPU / fldigi) : 33 tonalités espacées de 8,8 Hz, codage incrémental (IFK) insensible à la dérive,
+"""FSQ et IFKP : 33 tonalités espacées de 8,8 Hz, codage incrémental (IFK) insensible à la dérive,
 1,5 / 2 / 3 / 4,5 / 6 bauds. Une TFD de 4096 points toutes les 256 échantillons (12 kHz) ; une tonalité
 nouvelle, stable sur quelques trames, est un symbole ; l'écart avec la précédente donne un quartet ;
 Varicode FSQ à un ou deux quartets. Les messages dirigés (« indicatif:… ») s'affichent tels quels."""

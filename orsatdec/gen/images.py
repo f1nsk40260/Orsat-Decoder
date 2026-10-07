@@ -1,7 +1,6 @@
 """Générateurs de mires pour les modes image : fac-similé météo (WEFAX), SSTV et Hellschreiber.
 
-Ils suivent les émetteurs de fldigi (src/wefax, src/feld) et les normes SSTV (tables de temps de
-MMSSTV / QSSTV, identiques à PySSTV). Chaque générateur renvoie un tableau float64 (±amp) à fs Hz.
+Ils suivent les normes de chaque mode (tables de temps SSTV usuelles). Chaque générateur renvoie un tableau float64 (±amp) à fs Hz.
 """
 import numpy as np
 
@@ -90,9 +89,9 @@ def chart_image(w=1809, h=300, seed=0):
 # ------------------------------------------------------------------ WEFAX
 def wefax_encode(img, fs=12000, af=1900.0, lpm=120, ioc=576, shift=800.0, apt=True, phasing=20,
                  start_s=5.0, stop_s=5.0, black_s=2.0, ppm=0.0, amp=0.5):
-    """Émission fac-similé (séquence fldigi : APT départ, 20 lignes de phasage, 1 ligne blanche,
+    """Émission fac-similé (séquence : APT départ, 20 lignes de phasage, 1 ligne blanche,
     image, APT arrêt, noir). Le départ et l'arrêt sont ici conformes à la norme OMM (alternance
-    noir/blanc à 300 ou 675 Hz, puis 450 Hz) ; fldigi émet à la place une tonalité audio fixe.
+    noir/blanc à 300 ou 675 Hz, puis 450 Hz).
     ppm : erreur d'horloge de l'émetteur (pente à corriger)."""
     img = np.asarray(img)
     if img.ndim == 3:
@@ -270,7 +269,7 @@ def hell_columns(text):
 
 def hell_encode(text, mode="feld", fs=12000, af=1000.0, amp=0.5, pulse=0, reverse=False, ppm=0.0):
     """Émission Hellschreiber suivant feld::send_symbol (mise en forme en cosinus surélevé de 4 ms
-    pour pulse=0, 2 ms pour 1, 1 ms pour 2, carré pour 3 ; durées à 8000 Hz comme fldigi)."""
+    pour pulse=0, 2 ms pour 1, 1 ms pour 2, carré pour 3 ; durées à 8000 Hz)."""
     colrate, kind, bw = HELL_GEN[mode]
     pixrate = colrate * 14
     rate = fs * (1 + ppm * 1e-6)

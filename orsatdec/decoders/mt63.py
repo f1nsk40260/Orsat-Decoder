@@ -1,16 +1,13 @@
-"""Décodeur MT63 (500, 1000, 2000 Hz ; entrelacement court ou long), compatible fldigi.
+"""Décodeur MT63 (500, 1000, 2000 Hz ; entrelacement court ou long).
 
 Constantes et briques communes à l'émetteur (gen/mt63.py) et au récepteur.
 
-Le récepteur reprend MT63rx de fldigi (synchro par autocorrélation du signal au carré, démodulation
-différentielle, décodeur de Walsh qui cherche l'écart de porteuse ±8) avec ces différences :
-  - intégration de synchro de 64 symboles (fldigi : 16 ou 32) et démodulation retardée de 32 symboles :
-    ~1 dB de mieux, la synchro de fldigi décroche souvent avant le FEC vers -9 dB ;
+Récepteur : synchro par autocorrélation du signal au carré, démodulation différentielle, décodeur
+de Walsh qui cherche l'écart de porteuse ±8 ;
+  - intégration de synchro sur 64 symboles et démodulation retardée de 32 symboles ;
   - pas de seconde correction ±1,28 case vers la moyenne (elle peut figer la synchro sur une fausse
-    fréquence sous le bruit) ; somme des corrélations calculée correctement (fldigi soustrait la partie
-    imaginaire dans DoCorrelSum) ;
+    fréquence sous le bruit) ;
   - fréquence par droite de régression robuste (dérive lente suivie sans décrocher) ;
-  - porteuse 0 désentrelacée avec le bon retard (fldigi la lit avec un symbole de décalage) ;
   - squelch sur le S/B lissé du FEC.
 """
 from fractions import Fraction
@@ -26,7 +23,7 @@ CARR_SEPAR = 4          # écart entre porteuses en cases de FFT
 NCARR = 64              # porteuses de données
 MODES_BW = {500: (8, 128), 1000: (4, 64), 2000: (2, 64)}   # bande -> (décimation depuis 8 kHz, long. filtre)
 
-# Forme de symbole de MT63ASC (symbol.dat de fldigi), exprimée exactement (écart < 1e-8)
+# Forme de symbole MT63, exprimée exactement (écart < 1e-8)
 # comme une somme de 12 cosinus centrée sur l'échantillon 256.
 _SHAPE_COS = (0.248782749531, 0.416434389739, 0.210798980059, 0.0459663121398, 0.0344826593344,
               0.0436773669698, 0.0109545825572, -0.00458115026081, -0.00512450468084,
@@ -112,7 +109,7 @@ def _blackman3(ph):
 
 
 def quadr_shapes(af, bw, L):
-    """Filtres I/Q (dspWinFirI / WinFirQ, fenêtre Blackman3) du séparateur/combineur de fldigi."""
+    """Filtres I/Q (dspWinFirI / WinFirQ, fenêtre Blackman3) du séparateur/combineur."""
     hbw = 1.5 * bw / 2
     lo, hi = max(af - hbw, 100.0), min(af + hbw, 4000.0)
     lo, hi = lo * np.pi / 4000, hi * np.pi / 4000
@@ -218,7 +215,7 @@ def _sel_fit_line(y, thres, loops=4):
 
 
 class MT63(Decoder):
-    """Récepteur MT63 d'après MT63rx de fldigi (P. Jalocha SP9VRC) : synchro temps/fréquence
+    """Récepteur MT63 : synchro temps/fréquence
     par autocorrélation du signal élevé au carré, démodulation différentielle de 64 porteuses,
     désentrelacement et décodage de Walsh avec recherche de l'écart de porteuse (±8)."""
     name = "MT63"
@@ -240,7 +237,7 @@ class MT63(Decoder):
         self.fs_dec = 2.0 * bw
         self.bin_hz = self.fs_dec / SYMBOL_LEN
         self.carr_hz = CARR_SEPAR * self.bin_hz
-        # Squelch : rapport signal/bruit du FEC lissé (comme fldigi) ; le bruit seul reste sous ~3,15
+        # Squelch : rapport signal/bruit du FEC lissé ; le bruit seul reste sous ~3,15
         self.sq = float(squelch) if squelch is not None else 3.3
         self.af0 = float(af)
         self._setup(float(af))
@@ -312,7 +309,6 @@ class MT63(Decoder):
         self.L = L
         self.p = interleave_offsets(self.long)
         # retard de désentrelacement de chaque porteuse : total constant (L+1) symboles.
-        # (fldigi lit la porteuse 0 avec un retard 1 au lieu de L+1 : un bit faux sur 64.)
         e = (L - self.p) % L
         self.ddelay = L + 1 - e
         self.nrows = L + 2
@@ -419,7 +415,7 @@ class MT63(Decoder):
             F0 = i + np.angle(z) / (2 * np.pi) * Aa - fofs
             cand = (F0 - Aa, F0, F0 + Aa)
             fofs += min(cand, key=abs)
-            # NB : fldigi corrige encore ici de ±Aa vers la moyenne précédente ; sous le bruit cela
+            # NB : pas de correction de ±Aa vers la moyenne précédente ; sous le bruit cela
             # peut verrouiller durablement la synchro sur une fausse fréquence (écart de 1,28 case) :
             # on s'en passe, la moyenne robuste (sel_fit_aver) rejette déjà les mesures aberrantes.
         else:
@@ -443,7 +439,7 @@ class MT63(Decoder):
         self.symb_pipe[self.track_ptr] = st
         self.freq_pipe[self.track_ptr] = fofs
         self.aver_symb, _ = _sel_fit_aver(self.symb_pipe, 3.0, 4, cplx=True)
-        # Fréquence : droite de régression robuste sur l'historique (fldigi : simple moyenne) ; une
+        # Fréquence : droite de régression robuste sur l'historique ; une
         # dérive lente ne fait alors ni décrocher la synchro ni prendre de retard.
         order = (self.track_ptr + 1 + np.arange(self.integ)) % self.integ
         a, b, self.sync_fdev = _sel_fit_line(self.freq_pipe[order], 2.5, 4)

@@ -1,11 +1,11 @@
-"""Banc sur signaux réels : fait passer les décodeurs d'Orsat-Decoder sur les enregistrements de la
-base Artemis (sigidwiki), qui sont de vraies réceptions et non des mires générées.
+"""Banc sur signaux réels : fait passer les décodeurs d'Orsat-Decoder sur les enregistrements
+d'une base de signaux (dossier <base>/static/<id>/media), qui sont de vraies réceptions et non des
+mires générées.
 
-    python3 tests/artemis_bench.py ~/Artemis-DB            # tous les modes connus
-    python3 tests/artemis_bench.py ~/Artemis-DB rtty cw    # seulement certains
+    python3 tests/bench_reels.py <base>            # tous les modes connus
+    python3 tests/bench_reels.py <base> rtty cw    # seulement certains
 
-Artemis-DB : git clone --depth 1 https://github.com/AresValley/Artemis-DB (≈ 300 Mo, GPL-3).
-Demande ffmpeg pour lire les .ogg. Les images (fax, SSTV, Hell) sont écrites dans ./artemis-bench/.
+Demande ffmpeg pour lire les .ogg. Les images (fax, SSTV, Hell) sont écrites dans ./bench-reels/.
 Les échantillons ne durent que 8 à 40 s : pas de taux d'erreur ici (on ne connaît pas le texte émis),
 mais un texte lisible prouve que le décodeur tient sur un vrai signal d'ondes courtes.
 """
@@ -22,7 +22,7 @@ from orsatdec.images import ImageStore  # noqa: E402
 
 FS = 12000
 
-# signal Artemis (pageid) -> modes et variantes de paramètres à essayer
+# signal de la base (identifiant) -> modes et variantes de paramètres à essayer
 CASES = {
     "psk": (140, [("psk31", {}), ("psk63", {}), ("psk125", {})]),
     "rtty": (197, [("rtty", {"baud": b, "shift": s, "reverse": r})
@@ -139,7 +139,7 @@ def main():
         print(__doc__)
         return 2
     db, only = sys.argv[1], [a.lower() for a in sys.argv[2:]]
-    outdir = Path("artemis-bench")
+    outdir = Path("bench-reels")
     outdir.mkdir(exist_ok=True)
     for name, (pageid, variants) in CASES.items():
         if only and name not in only:

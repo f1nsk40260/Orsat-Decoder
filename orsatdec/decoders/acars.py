@@ -1,12 +1,12 @@
 """ACARS (ARINC 618) : messages des avions en VHF (129 à 137 MHz), AM, MSK à 2400 bits/s sur une
 sous-porteuse audio (1200 / 2400 Hz).
 
-Démodulateur MSK cohérent et boucle de phase repris d'acarsdec (Thierry Leconte, LGPL-2) :
+Démodulateur MSK cohérent et boucle de phase :
 mélange à 1800 Hz, filtre adapté en demi-cosinus, horloge de bit à 2400 Hz, la boucle corrige
 l'écart de fréquence. Trame : SYN SYN SOH, mode, immatriculation (7), ACK, étiquette (2), bloc,
 STX, [n° de message (4), vol (6) dans le sens avion -> sol], texte, ETX / ETB, CRC-16. Caractères
 de 7 bits + parité impaire, bit de poids faible en premier. Jusqu'à trois erreurs de parité sont
-corrigées à l'aide du CRC (comme acarsdec).
+corrigées à l'aide du CRC.
 """
 import itertools
 import math

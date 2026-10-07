@@ -1,6 +1,6 @@
-"""Décodeur DominoEX (DominoEX 4 à 88 et Micro, compatible fldigi) : IFK+ à 18 tonalités, Varicode à quartets.
+"""Décodeur DominoEX (DominoEX 4 à 88 et Micro) : IFK+ à 18 tonalités, Varicode à quartets.
 
-Option « FEC » (DOMINOEX_FEC de fldigi, compatible MultiPSK) : code convolutif K=7 et entrelaceur 4x4 sur
+Option « FEC » : code convolutif K=7 et entrelaceur 4x4 sur
 le Varicode MFSK. Le canal secondaire (texte d'attente) est reconnu mais pas affiché.
 
 Sans FEC, chaque quartet est la valeur la plus vraisemblable compte tenu des énergies des deux symboles
@@ -15,7 +15,7 @@ from .ifk_tables import DOMINO_VARIDEC, MFSK_VARIDEC
 
 
 def mupsk_pri2sec(c):
-    """MuPskPriSecChar de fldigi : codes primaires réservés -> caractère secondaire (| 0x100)."""
+    """Codes primaires réservés -> caractère secondaire (| 0x100)."""
     if 127 <= c < 153:
         return c + (ord("A") - 127) + 0x100
     if 14 <= c < 24:

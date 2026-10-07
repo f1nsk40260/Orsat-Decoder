@@ -1,9 +1,9 @@
-"""Générateurs de mires MFSK, DominoEX et THOR, conformes à la partie émission de fldigi
-(mfsk.cxx, dominoex.cxx, thor.cxx) : préambule, STX/EOT, codage convolutif, entrelaceur, Varicode,
-codage de Gray (MFSK) ou IFK+ (DominoEX/THOR). Phase continue, comme fldigi.
+"""Générateurs de mires MFSK, DominoEX et THOR :
+préambule, STX/EOT, codage convolutif, entrelaceur, Varicode,
+codage de Gray (MFSK) ou IFK+ (DominoEX/THOR). Phase continue.
 
 Chaque fonction renvoie un tableau float64 (±amp) à fs Hz, centré sur af Hz.
-Les fonctions *_tones() donnent la suite des numéros de tonalité (pour la comparaison avec fldigi).
+Les fonctions *_tones() donnent la suite des numéros de tonalité.
 """
 import numpy as np
 
@@ -112,7 +112,7 @@ def _sec2pri_init():
 
 
 def mupsk_sec2pri(c):
-    """MuPskSec2Pri de fldigi : caractère secondaire -> code primaire réservé (DominoEX FEC)."""
+    """Caractère secondaire -> code primaire réservé (DominoEX FEC)."""
     if not _SEC2PRI:
         _sec2pri_init()
     if ord("a") <= c <= ord("z"):

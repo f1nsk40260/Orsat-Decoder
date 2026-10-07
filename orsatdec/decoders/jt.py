@@ -1,14 +1,13 @@
-"""JT65 et JT9 (K1JT) : modes à signaux faibles en créneaux d'une minute.
+"""JT65 et JT9 : modes à signaux faibles en créneaux d'une minute.
 
 - JT65 (A/B/C) : 126 symboles de 0,372 s, 65 tonalités (une de synchronisation suivant une suite
   pseudo-aléatoire de 126 bits, 64 de données), code de Reed-Solomon (63, 12) sur GF(64),
   entrelacement 7x9, code de Gray. Décodage : Berlekamp-Massey avec effacements des symboles les
-  moins sûrs (pas l'algorithme de Kötter-Vardy de WSJT-X, qui n'est pas libre).
+  moins sûrs.
 - JT9A : 85 symboles de 0,576 s, 9 tonalités (16 de synchronisation), code convolutif K=32 1/2
-  (le même que WSPR) décodé par l'algorithme de Fano de wsprd (native/), entrelacement par
+  (le même que WSPR) décodé par l'algorithme de Fano (native/), entrelacement par
   inversion de bits, code de Gray.
 Messages de 72 bits « JT » (deux indicatifs et un locator ou un report, ou 13 caractères libres).
-Constantes et formats d'après WSJT-X (GPL-3).
 """
 import logging
 import subprocess
@@ -295,7 +294,7 @@ def _encode_rs(data):
 
 
 def _decode_rs(data, eras):
-    """Décodeur de Karn (erreurs et effacements) ; data modifié sur place. -> nombre de corrections ou -1."""
+    """Décodeur de Reed-Solomon (erreurs et effacements) ; data modifié sur place. -> nombre de corrections ou -1."""
     s = [data[0]] * _NROOTS
     for j in range(1, _NN):
         for i in range(_NROOTS):
@@ -379,14 +378,14 @@ def _decode_rs(data, eras):
 
 
 def rs_encode(dgen):
-    """12 mots -> 63 symboles (ordre de WSJT-X)."""
+    """12 mots -> 63 symboles (ordre d'émission)."""
     dat1 = dgen[::-1]
     b = _encode_rs(dat1)
     return b[::-1] + dat1[::-1]
 
 
 def rs_decode(recd0, eras0):
-    """63 symboles (ordre WSJT-X), positions d'effacement -> (12 mots, nombre de corrections)."""
+    """63 symboles (ordre d'émission), positions d'effacement -> (12 mots, nombre de corrections)."""
     recd = recd0[62:50:-1] + recd0[50::-1]
     eras = []
     for p in eras0:                      # position dans recd0 -> position dans recd
@@ -461,7 +460,7 @@ def jt9_tones_from_words(d):
 
 
 def fano_decode(soft):
-    """206 valeurs souples (0..255, 255 = bit 1) -> 72 bits ou None (Fano de wsprd, natif)."""
+    """206 valeurs souples (0..255, 255 = bit 1) -> 72 bits ou None (Fano, natif)."""
     exe = NATIVE / "wspr_decode_iq"
     if not exe.exists():
         return None

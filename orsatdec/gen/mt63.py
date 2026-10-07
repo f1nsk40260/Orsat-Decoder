@@ -1,8 +1,8 @@
-"""Générateur MT63 (mire de test), copie fidèle de l'émetteur de fldigi (MT63tx, mt63base.cxx).
+"""Générateur MT63 (mire de test).
 
 64 porteuses BPSK différentielles, symboles en forme de fenêtre (IFFT 512 points + recouvrement),
 porteuses impaires décalées d'un demi-symbole, FEC de Walsh sur 7 bits et entrelacement court/long.
-Le signal est d'abord produit exactement comme fldigi à 8000 Hz (bande de base complexe à
+Le signal est d'abord produit à 8000 Hz (bande de base complexe à
 8000/D Hz, puis filtre d'interpolation « QuadrComb » Blackman3), puis rééchantillonné à fs.
 """
 from fractions import Fraction
@@ -15,9 +15,9 @@ from ..decoders.mt63 import (SYMBOL_LEN, SYMBOL_SEPAR, CARR_SEPAR, NCARR, MODES_
 
 
 class MT63Tx:
-    """Émetteur MT63 symbole par symbole (équivalent de MT63tx de fldigi).
+    """Émetteur MT63 symbole par symbole .
 
-    prefill : remplissage initial de l'entrelaceur (fldigi : bits aléatoires) ; None = zéros.
+    prefill : remplissage initial de l'entrelaceur  ; None = zéros.
     """
 
     def __init__(self, bw=1000, long_intlv=True, af=None, prefill="random", seed=1):
@@ -53,7 +53,7 @@ class MT63Tx:
         self.bins = (self.first + CARR_SEPAR * np.arange(NCARR)) & self.mask
         self.window = symbol_shape()
         self.ovl = np.zeros(N, np.complex128)                       # tampon de recouvrement
-        # Filtre d'interpolation complexe -> réel (fldigi : dspQuadrComb, fenêtre Blackman3)
+        # Filtre d'interpolation complexe -> réel (fenêtre Blackman3)
         self.shape_i, self.shape_q = quadr_shapes(self.af, bw, self.alias_len)
         self.comb_tail = np.zeros(self.alias_len)
 
@@ -117,7 +117,7 @@ class MT63Tx:
 
 
 def mt63_symbols(text, eight_bit=True):
-    """Suite des codes émis par fldigi pour un texte (hors préambule/vidage)."""
+    """Suite des codes émis pour un texte (hors préambule/vidage)."""
     codes = []
     for ch in text:
         c = ord(ch)
@@ -132,9 +132,9 @@ def mt63_symbols(text, eight_bit=True):
 
 def mt63_encode_8k(text, bw=1000, long_intlv=True, af=None, prefill="random", seed=1, jam=True,
                    normalize=True, tones=0.0):
-    """Signal MT63 à 8000 Hz, séquence identique à mt63::tx_process de fldigi :
+    """Signal MT63 à 8000 Hz, séquence d'émission :
     [tonalités d'accord], IntlvLen caractères nuls, le texte, IntlvLen-1 nuls de vidage, puis un
-    symbole de brouillage. tones > 0 : durée (s) des deux tonalités de début de fldigi (porteuse
+    symbole de brouillage. tones > 0 : durée (s) des deux tonalités de début (porteuse
     basse et haute, réglage par défaut « MT63USETONES », 4 s)."""
     tx = MT63Tx(bw, long_intlv, af, prefill, seed)
     rng = np.random.default_rng(seed + 1)
@@ -158,7 +158,7 @@ def mt63_encode_8k(text, bw=1000, long_intlv=True, af=None, prefill="random", se
 
 
 def mt63_encode(text, fs=12000, af=None, bw=1000, long_intlv=True, amp=0.5, seed=1, tones=0.0):
-    """Mire MT63 à fs Hz. af = centre du signal (défaut fldigi : bord bas à 500 Hz → 500 + bw/2)."""
+    """Mire MT63 à fs Hz. af = centre du signal (défaut : bord bas à 500 Hz → 500 + bw/2)."""
     y = mt63_encode_8k(text, bw, long_intlv, af, seed=seed, tones=tones)
     if int(fs) != 8000:
         fr = Fraction(float(fs) / 8000).limit_denominator(1000)

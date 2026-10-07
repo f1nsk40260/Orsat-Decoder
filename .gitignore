@@ -1,11 +1,11 @@
 __pycache__/
 *.pyc
 native/bin/
-native/ft8_lib/.build/
-native/ft8_lib/*.a
-native/ft8_lib/decode_ft8
-native/ft8_lib/gen_ft8
-native/ft8_lib/test_ft8
+native/ft8/.build/
+native/ft8/*.a
+native/ft8/decode_ft8
+native/ft8/gen_ft8
+native/ft8/test_ft8
 venv/
 config.json
 *.tmp

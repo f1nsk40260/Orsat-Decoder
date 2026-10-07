@@ -1,13 +1,12 @@
-"""Générateur de mires Olivia et Contestia, calqué bit pour bit sur l'émetteur de fldigi
-(src/include/jalocha/pj_mfsk.h : MFSK_Encoder, MFSK_Modulator, RateConverter, MFSK_Transmitter,
-et olivia.cxx / contestia.cxx : tonalités de début et de fin, choix de la première porteuse).
+"""Générateur de mires Olivia et Contestia : codeur, modulateur, tonalités de début et de fin,
+choix de la première porteuse.
 
-Tout est calculé à 8000 Hz comme dans fldigi, puis rééchantillonné à fs.
+Tout est calculé à 8000 Hz, puis rééchantillonné à fs.
 """
 import numpy as np
 from scipy.signal import resample_poly
 
-SR = 8000                                  # fréquence d'échantillonnage interne de fldigi
+SR = 8000                                  # fréquence d'échantillonnage interne
 SCRAMBLE_OLIVIA = 0xE257E6D0291574EC
 SCRAMBLE_CONTESTIA = 0xEDB88320
 
@@ -67,7 +66,7 @@ def mode_params(tones, bw, contestia=False):
 
 
 def first_carrier(af, p, contestia=False):
-    """Indice (en cases FFT de 8000/symlen Hz) de la tonalité la plus basse, comme olivia.cxx/contestia.cxx."""
+    """Indice (en cases FFT de 8000/symlen Hz) de la tonalité la plus basse."""
     if contestia:
         fcm = np.float32((af - (p["bw"] // 2)) / 500)
     else:
@@ -139,7 +138,7 @@ def text_blocks(text, p, contestia=False, olivia8bit=True):
             else:
                 c = ord(".")
         calls.append([c])
-    queue = [0]                            # olivia.cxx : Tx->PutChar(0) après le préambule
+    queue = [0]                            # un caractère nul après le préambule
     pos, stop, blocks = 0, False, []
     symptr = 0
     while True:
@@ -181,7 +180,7 @@ def _rateconv_taps():
 
 def modulate(symbols, p, fc, rand_bits):
     """MFSK_Modulator::Send/Output + RateConverter + normalisation par paquet de MFSK_Transmitter::Output.
-    fc : première porteuse (cases FFT). rand_bits : itérable d'entiers (rand() de fldigi)."""
+    fc : première porteuse (cases FFT). rand_bits : itérable d'entiers (bits aléatoires)."""
     L, sep = p["symlen"], p["sep"]
     mask = L - 1
     cos_t = np.cos(2 * np.pi * np.arange(L) / L)
@@ -249,10 +248,10 @@ def _encode(text, fs, af, tones, bw, amp, contestia, tones_on, rand_bits):
 
 
 def olivia_encode(text, fs=12000, af=1500.0, tones=32, bw=1000, amp=0.5, start_tones=True, rand_bits=None):
-    """Signal Olivia tones/bw centré sur af (convention fldigi), float64 à fs Hz."""
+    """Signal Olivia tones/bw centré sur af, float64 à fs Hz."""
     return _encode(text, fs, af, tones, bw, amp, False, start_tones, rand_bits)
 
 
 def contestia_encode(text, fs=12000, af=1500.0, tones=8, bw=500, amp=0.5, start_tones=True, rand_bits=None):
-    """Signal Contestia tones/bw centré sur af (convention fldigi), float64 à fs Hz."""
+    """Signal Contestia tones/bw centré sur af, float64 à fs Hz."""
     return _encode(text, fs, af, tones, bw, amp, True, start_tones, rand_bits)

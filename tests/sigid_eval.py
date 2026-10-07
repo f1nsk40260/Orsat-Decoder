@@ -1,6 +1,6 @@
-"""Mesure le taux de bonne identification sur les enregistrements de la base Artemis.
+"""Mesure le taux de bonne identification sur les enregistrements de la base de signaux.
 
-    python3 tests/sigid_eval.py ~/Artemis-DB
+    python3 tests/sigid_eval.py <base>
 
 Chaque enregistrement est coupé en deux : l'empreinte de référence vient de la première moitié, la
 question est posée avec la seconde. C'est la même émission, donc un résultat optimiste pour l'empreinte ;

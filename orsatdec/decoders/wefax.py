@@ -3,7 +3,7 @@
 Chaîne : mélange vers la bande de base autour du centre (1900 Hz), filtrage, discriminateur de fréquence
 (différence de phase entre échantillons), puis découpage en lignes.
 
-Automatisme (comme fldigi / la norme OMM) :
+Automatisme (norme OMM) :
   - signal de départ APT : alternance noir/blanc à 300 Hz (IOC 576) ou 675 Hz (IOC 288), 5 s ;
   - lignes de phasage : noir avec une impulsion blanche de 5 % centrée sur le début de ligne ;
     on mesure les instants des impulsions et une droite des moindres carrés donne à la fois la durée

@@ -1,7 +1,7 @@
-"""Génère orsatdec/data/sigid.json à partir d'Artemis-DB (base sigidwiki d'Artemis, GPL-3).
+"""Génère orsatdec/data/sigid.json à partir d'une base de signaux (fiches et
+enregistrements de référence).
 
-    git clone --depth 1 https://github.com/AresValley/Artemis-DB ~/Artemis-DB
-    python3 tools/make_sigid.py ~/Artemis-DB
+    python3 tools/make_sigid.py <base>
 
 Pour chaque signal : titre, catégories, fréquences, largeur, modulation, mode, ACF (paramètres déclarés),
 et, quand l'enregistrement de référence passe dans une bande BLU, son « empreinte » : les mesures
@@ -119,9 +119,7 @@ def main():
     recs = build(sys.argv[1])
     out = ROOT / "orsatdec" / "data" / "sigid.json"
     out.parent.mkdir(exist_ok=True)
-    out.write_text(json.dumps({
-        "source": "Artemis-DB (https://github.com/AresValley/Artemis-DB), données sigidwiki.com, GPL-3",
-        "signals": recs}, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    out.write_text(json.dumps({"signals": recs}, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     n = sum(1 for r in recs if r.get("fp"))
     ns = len({(r["id"], f["label"]) for r in recs for f in r.get("fps", [])})
     print(f"{len(recs)} signaux de bande audio, dont {n} avec empreinte, + {ns} sous-modes générés (3 niveaux de bruit) -> {out} ({out.stat().st_size // 1024} Ko)")
