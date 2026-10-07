@@ -359,7 +359,9 @@ def public_catalog():
     out = []
     for m in MODES:
         out.append({k: v for k, v in m.items() if k != "make"})
-    return {"modes": out, "presets": PRESETS, "directory": directory()}
+    from .decoders.hfdl import STATIONS
+    hfdl = [{"id": k, "name": v[0], "lat": v[1], "lon": v[2], "freqs": v[3]} for k, v in STATIONS.items()]
+    return {"modes": out, "presets": PRESETS, "directory": directory(), "hfdl_stations": hfdl}
 
 
 def default_params(mode):

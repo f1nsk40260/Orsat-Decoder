@@ -723,6 +723,21 @@ def hfdl_perf_mpdu(gid, ac, flight, lat, lon, secs, freq_id=2):
     return fcs(hdr) + lp
 
 
+def hfdl_logon_mpdu(gid, ac, icao_addr):
+    """MPDU descendant : demande de connexion (LPDU 0x8F) d'un avion, sans position."""
+    from ..decoders.hfdl import crc16
+
+    def fcs(b):
+        c = crc16(b)
+        return bytes(b) + bytes([c & 0xFF, c >> 8])
+
+    def rev(b):
+        return int(f"{b:08b}"[::-1], 2)
+    lp = fcs(bytes([0x8F, rev(icao_addr >> 16 & 0xFF), rev(icao_addr >> 8 & 0xFF), rev(icao_addr & 0xFF)]))
+    hdr = bytes([0x03 | (1 << 2), gid, ac, 0, 0, 0, len(lp) - 1])
+    return fcs(hdr) + lp
+
+
 def hfdl_spdu(gid, mask):
     from ..decoders.hfdl import crc16
     b = bytearray(64)

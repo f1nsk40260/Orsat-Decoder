@@ -259,3 +259,7 @@ dialog code { color: var(--text); }
 .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: var(--panel); color: var(--text); }
 .leaflet-container { background: #0D151D; }
 .osm-dark { filter: invert(1) hue-rotate(180deg) brightness(0.85) contrast(0.9) saturate(0.6); }
+.map-fit { font-size: 16px; line-height: 30px !important; text-align: center; font-weight: 700; }
+.map-legend { background: #141E28d9; color: var(--text); padding: 4px 8px; border-radius: 6px; font-size: 12px; }
+.map-legend .lg-plane { color: var(--fluo); } .map-legend .lg-heard { color: #FF9F1C; }
+.map-legend .lg-gs { color: var(--gold); } .map-legend .lg-gs0 { color: #6E8193; }

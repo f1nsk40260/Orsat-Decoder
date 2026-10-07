@@ -68,6 +68,7 @@ elif os.environ.get("FAKE_TCI_SET") == "hfdl":
             for ac, vol, a, b in vols:
                 lat, lon = (a, b)[k]
                 fr.append((U.hfdl_perf_mpdu(7, ac, vol, lat, lon, 12 * 3600 + 600 * k + ac), 2))
+        fr += [(U.hfdl_logon_mpdu(7, 60, 0x3C6545), 1), (U.hfdl_logon_mpdu(7, 61, 0x4CA1B2), 1)]
         return U.hfdl_encode(fr, af=AF0, foff=0.0, gap=0.4)
     STATIONS = [(8_943_440, _hfdl)]
     DIAL0 = 8_942_000

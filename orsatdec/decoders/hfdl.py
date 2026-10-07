@@ -253,6 +253,7 @@ class AircraftCache:
         self.cur = ""
         self.pos = []
         self.gs = set()
+        self.heard = []             # (avion, station) des trames, avec ou sans position
 
     def position(self, lat, lon, flight, tt):
         if -90 <= lat <= 90 and -180 <= lon <= 180 and (abs(lat) > 0.01 or abs(lon) > 0.01):
@@ -344,6 +345,7 @@ def mpdu(buf, ctx):
         gid, ac = buf[1] & 0x7F, buf[2]
         ctx.gid = gid
         ctx.cur = ctx.name(gid, ac)
+        ctx.heard.append((ctx.cur, gid))
         head = f"{ctx.cur} -> {station(gid, ctx)}"
         sizes = [buf[6 + j] + 1 for j in range(n)]
         groups = [(head, sizes)]
@@ -363,6 +365,7 @@ def mpdu(buf, ctx):
         gid = buf[1] & 0x7F
         ctx.gid = gid
         groups = [(f"{station(gid, ctx)} -> {ctx.name(gid, ac)}", sizes) for ac, sizes in hdr]
+        ctx.heard += [(ctx.name(gid, ac), gid) for ac, _ in hdr if ac]
         up = True
     out = []
     p = h + 2
@@ -614,7 +617,7 @@ class HFDL(Decoder):
         if r is None:
             return None
         m1, data, terr, nsym = r
-        self.ctx.pos, self.ctx.gs, self.ctx.cur = [], set(), ""
+        self.ctx.pos, self.ctx.gs, self.ctx.cur, self.ctx.heard = [], set(), "", []
         try:
             buf = decode_bits(m1, data)
             lines = decode_pdu(buf, self.ctx)
@@ -634,6 +637,7 @@ class HFDL(Decoder):
             out[-1]["pos"] = self.ctx.pos
             out[-1]["gs"] = [{"id": g, "name": STATIONS[g][0], "lat": STATIONS[g][1], "lon": STATIONS[g][2]}
                              for g in sorted(self.ctx.gs)]
+            out[-1]["heard"] = [{"ac": a, "gs": g} for a, g in dict.fromkeys(self.ctx.heard)]
         return (nsym + 10) * 3
 
 

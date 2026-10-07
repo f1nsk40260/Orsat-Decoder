@@ -274,7 +274,13 @@ function buildCard(c) {
   const clear = el('button', { class: 'icon-btn small', type: 'button', title: 'Effacer le texte', text: 'Effacer' });
   clear.onclick = () => {
     c.out.replaceChildren(); c.cur = null; c.table = null; c.pic = null;
-    if (c.mapData) { c.mapData = null; c.mapLayer?.clearLayers(); if (c.mapBtn) c.mapBtn.textContent = 'Carte'; }
+    if (c.mapData) {
+      c.mapData = null; c.mapLayer?.clearLayers();
+      if (c.mk) { c.mk.planes.clear(); c.mk.heard.clear();
+        for (const { mk, g } of c.mk.gs.values()) mk.setStyle({ radius: 6, color: '#6E8193', weight: 1.5, fillColor: '#6E8193', fillOpacity: 0.15 })
+          .setTooltipContent(`Station HFDL ${g.id} : ${g.name} (non entendue)<br>${g.freqs.join(', ')} kHz`); }
+      if (c.mapBtn) c.mapBtn.textContent = 'Carte';
+    }
   };
   const isImg = m.kind === 'img', isIdent = m.kind === 'ident';
   if (isImg) clear.title = 'Effacer les images';
@@ -484,7 +490,7 @@ function writeMsg(c, m) {
     el('td', { class: 'n', text: m.dt != null ? m.dt.toFixed(1) : '' }), el('td', { class: 'n', text: m.freq ?? '' }),
     el('td', { class: 'm', text: m.text }));
   c.lastSlot = m.utc;
-  if (m.pos || m.gs) mapUpdate(c, m);
+  if (m.pos || m.gs || m.heard) mapUpdate(c, m);
   c.table.append(tr);
   while (c.table.rows.length > 1500) c.table.deleteRow(0);
   if (atBottom) out.scrollTop = out.scrollHeight;
@@ -497,8 +503,8 @@ function bearing(a, b) {
   return (Math.atan2(y, x) / r + 360) % 360;
 }
 function mapUpdate(c, m) {
-  const d = (c.mapData ||= { planes: new Map(), gs: new Map() });
-  for (const g of m.gs || []) d.gs.set(g.id, g);
+  const d = (c.mapData ||= { planes: new Map(), gs: new Map(), heard: new Map() });
+  for (const g of m.gs || []) d.gs.set(g.id, { ...g, seen: m.utc });
   for (const p of m.pos || []) {
     const key = p.flight || p.ac || `${p.lat},${p.lon}`;
     const pl = d.planes.get(key) || { key, track: [] };
@@ -508,8 +514,20 @@ function mapUpdate(c, m) {
     Object.assign(pl, p, { seen: m.utc });
     d.planes.set(key, pl);
   }
+  const placed = new Set([...d.planes.values()].map(p => p.ac).filter(Boolean));
+  for (const h of m.heard || []) {
+    if (placed.has(h.ac)) { d.heard.delete(h.ac); continue; }
+    d.heard.delete(h.ac);                                  // réinséré à la fin : les plus récents en dernier
+    d.heard.set(h.ac, { ...h, seen: m.utc });
+    while (d.heard.size > 60) d.heard.delete(d.heard.keys().next().value);
+  }
+  for (const a of placed) d.heard.delete(a);
   if (c.map) mapDraw(c);
-  if (c.mapBtn && d.planes.size) c.mapBtn.textContent = `Carte (${d.planes.size})`;
+  if (c.mapBtn) {
+    const n = d.planes.size, u = d.heard.size;
+    c.mapBtn.textContent = n || u ? `Carte (${n}${u ? ' + ' + u : ''})` : 'Carte';
+    c.mapBtn.title = `${n} avion(s) positionné(s), ${u} entendu(s) sans position`;
+  }
 }
 function toggleMap(c) {
   const div = c.mapEl;
@@ -530,38 +548,102 @@ function toggleMap(c) {
       maxZoom: 12, className: 'osm-dark',
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">contributeurs OpenStreetMap</a> · Natural Earth',
     }).addTo(c.map);
+    c.mk = { planes: new Map(), heard: new Map(), gs: new Map() };
     c.mapLayer = L.layerGroup().addTo(c.map);
-    c.mapFitted = false;
+    // les 16 stations au sol, toujours affichées : grises tant qu'on ne les a pas entendues
+    for (const g of S.catalog.hfdl_stations || []) {
+      const mk = L.circleMarker([g.lat, g.lon], { radius: 6, color: '#6E8193', weight: 1.5, fillColor: '#6E8193', fillOpacity: 0.15 })
+        .bindTooltip(`Station HFDL ${g.id} : ${g.name} (non entendue)<br>${g.freqs.join(', ')} kHz`, { direction: 'top' })
+        .addTo(c.map);
+      c.mk.gs.set(g.id, { mk, g });
+    }
+    // suivi automatique tant qu'on ne déplace pas la carte soi-même
+    c.mapAuto = true;
+    const manual = () => { c.mapAuto = false; };
+    div.addEventListener('mousedown', manual);
+    div.addEventListener('wheel', manual, { passive: true });
+    div.addEventListener('touchstart', manual, { passive: true });
+    const Fit = L.Control.extend({ options: { position: 'topleft' }, onAdd: () => {
+      const b = L.DomUtil.create('a', 'map-fit');
+      b.href = '#'; b.title = 'Tout voir et suivre les nouveaux avions'; b.textContent = '⤢';
+      L.DomEvent.on(b, 'mousedown wheel', L.DomEvent.stopPropagation);
+      L.DomEvent.on(b, 'click', e => { L.DomEvent.preventDefault(e); c.mapAuto = true; mapFit(c, true); });
+      const box = L.DomUtil.create('div', 'leaflet-bar'); box.append(b); return box;
+    } });
+    c.map.addControl(new Fit());
+    const Legend = L.Control.extend({ options: { position: 'bottomleft' }, onAdd: () => {
+      const e = L.DomUtil.create('div', 'map-legend');
+      e.innerHTML = '<span class="lg-plane">✈</span> position reçue · <span class="lg-heard">●</span> entendu sans position '
+        + '(autour de sa station) · <span class="lg-gs">●</span> station entendue · <span class="lg-gs0">○</span> station muette';
+      return e;
+    } });
+    c.map.addControl(new Legend());
   }
-  setTimeout(() => { c.map.invalidateSize(); c.mapFitted = false; mapDraw(c); }, 50);
+  setTimeout(() => { c.map.invalidateSize(); mapDraw(c); mapFit(c, true); }, 50);
+}
+function mapFit(c, force) {
+  if (!c.map || !c.mapData || (!force && !c.mapAuto)) return;
+  const d = c.mapData, pts = [];
+  for (const p of d.planes.values()) pts.push([p.lat, p.lon]);
+  for (const g of d.gs.values()) pts.push([g.lat, g.lon]);
+  if (!pts.length) return;
+  const b = L.latLngBounds(pts);
+  // en suivi automatique, on recadre quand un avion ou une station apparaît, ou quand un avion sort du cadre
+  const n = pts.length;
+  if (!force && n === c.mapFitN && c.map.getBounds().pad(-0.05).contains(b)) return;
+  c.mapFitN = n;
+  c.map.fitBounds(b.pad(0.25), { maxZoom: 5, animate: !force });
 }
 function mapDraw(c) {
   const d = c.mapData; if (!d || !c.map) return;
-  const lay = c.mapLayer; lay.clearLayers();
-  const pts = [];
-  for (const g of d.gs.values()) {
-    L.circleMarker([g.lat, g.lon], { radius: 7, color: '#C9A24A', weight: 2, fillColor: '#C9A24A', fillOpacity: 0.35 })
-      .bindTooltip(`Station HFDL : ${g.name}`, { direction: 'top' }).addTo(lay);
-    pts.push([g.lat, g.lon]);
+  // stations entendues : dorées
+  for (const [id, g] of d.gs) {
+    const s = c.mk.gs.get(id); if (!s) continue;
+    s.mk.setStyle({ radius: 7, color: '#C9A24A', weight: 2, fillColor: '#C9A24A', fillOpacity: 0.45 });
+    s.mk.setTooltipContent(`Station HFDL ${id} : ${s.g.name}<br>entendue à ${fmtUtc(g.seen)} UTC<br>${s.g.freqs.join(', ')} kHz`);
   }
-  for (const p of d.planes.values()) {
-    if (p.track.length > 1) L.polyline(p.track.map(t => [t.lat, t.lon]), { color: '#39FF14', weight: 2, opacity: 0.6 }).addTo(lay);
+  // avions positionnés : mis à jour sur place (une bulle ouverte reste ouverte)
+  for (const [key, p] of d.planes) {
     const n = p.track.length, hdg = n > 1 ? bearing(p.track[n - 2], p.track[n - 1]) : 0;
     const icon = L.divIcon({ className: 'plane-ico', iconSize: [22, 22], iconAnchor: [11, 11],
       html: `<div style="transform:rotate(${hdg}deg)">${PLANE_SVG}</div>` });
-    const t = p.seen ? `${p.seen.slice(0, 2)}:${p.seen.slice(2, 4)}` : '';
-    L.marker([p.lat, p.lon], { icon })
-      .bindTooltip(p.flight || p.ac || '?', { permanent: true, direction: 'right', offset: [10, 0], className: 'plane-lbl' })
-      .bindPopup(`<b>${p.flight || '?'}</b>${p.ac ? ' · ' + p.ac : ''}<br>${p.lat.toFixed(3)}°, ${p.lon.toFixed(3)}°<br>`
-        + `position de ${p.time} UTC, reçue à ${t} UTC` + (n > 1 ? `<br>${n} positions` : ''))
-      .addTo(lay);
-    pts.push([p.lat, p.lon]);
+    const html = `<b>${p.flight || '?'}</b>${p.ac ? ' · ' + p.ac : ''}<br>${p.lat.toFixed(3)}°, ${p.lon.toFixed(3)}°<br>`
+      + `position de ${p.time} UTC, reçue à ${fmtUtc(p.seen)} UTC` + (n > 1 ? `<br>${n} positions` : '');
+    let o = c.mk.planes.get(key);
+    if (!o) {
+      o = { line: L.polyline([], { color: '#39FF14', weight: 2, opacity: 0.6 }).addTo(c.mapLayer),
+        mk: L.marker([p.lat, p.lon], { icon }).addTo(c.mapLayer)
+          .bindTooltip(p.flight || p.ac || '?', { permanent: true, direction: 'right', offset: [10, 0], className: 'plane-lbl' })
+          .bindPopup(html) };
+      c.mk.planes.set(key, o);
+    } else {
+      o.mk.setLatLng([p.lat, p.lon]).setIcon(icon).setPopupContent(html);
+    }
+    o.line.setLatLngs(n > 1 ? p.track.map(t => [t.lat, t.lon]) : []);
   }
-  if (!c.mapFitted && pts.length) {
-    c.map.fitBounds(L.latLngBounds(pts).pad(0.3), { maxZoom: 5 });
-    c.mapFitted = d.planes.size > 0;
+  // avions entendus sans position : en orange, en couronne autour de la station avec laquelle ils parlent
+  const byGs = new Map();
+  for (const h of d.heard.values()) { if (!byGs.has(h.gs)) byGs.set(h.gs, []); byGs.get(h.gs).push(h); }
+  const keep = new Set();
+  for (const [gid, list] of byGs) {
+    const st = (S.catalog.hfdl_stations || []).find(g => g.id === gid); if (!st) continue;
+    list.forEach((h, i) => {
+      const ang = 2 * Math.PI * i / Math.max(list.length, 6), r = 2.2 + 0.9 * Math.floor(i / 12);
+      const ll = [st.lat + r * Math.sin(ang), st.lon + r * Math.cos(ang) / Math.max(0.2, Math.cos(st.lat * Math.PI / 180))];
+      const tip = `${h.ac} : position inconnue<br>en liaison avec ${st.name}, à ${fmtUtc(h.seen)} UTC`;
+      let o = c.mk.heard.get(h.ac);
+      if (!o) {
+        o = L.circleMarker(ll, { radius: 4, color: '#FF9F1C', weight: 1, fillColor: '#FF9F1C', fillOpacity: 0.8 })
+          .bindTooltip(tip, { direction: 'top' }).addTo(c.mapLayer);
+        c.mk.heard.set(h.ac, o);
+      } else { o.setLatLng(ll).setTooltipContent(tip); }
+      keep.add(h.ac);
+    });
   }
+  for (const [a, o] of c.mk.heard) if (!keep.has(a)) { o.remove(); c.mk.heard.delete(a); }
+  mapFit(c, false);
 }
+function fmtUtc(u) { return u ? `${u.slice(0, 2)}:${u.slice(2, 4)}` : '?'; }
 
 // ------------------------------------------------------------------ identification
 const WHY = { empreinte: 'empreinte', largeur: 'largeur', modulation: 'modulation', 'fréquence': 'fréquence', ACF: 'ACF' };
