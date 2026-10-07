@@ -38,7 +38,7 @@ Désinstallation : `~/Orsat-Decoder/uninstall.sh`.
 | Famille | Modes |
 |---|---|
 | PSK | PSK31 à PSK1000, QPSK31 à QPSK500, PSK-R 125 à 1000 |
-| RTTY et télex | RTTY 45 à 100 bauds, ASCII 110 bauds |
+| RTTY et télex | RTTY 45 à 100 bauds, ASCII 110 bauds ; bulletins météo (DWD) traduits en français |
 | CW | 5 à 60 mots/min, vitesse automatique |
 | MFSK | MFSK4 à 128, DominoEX, THOR |
 | Olivia | Olivia et Contestia, 4 à 64 tonalités, 125 à 2000 Hz |

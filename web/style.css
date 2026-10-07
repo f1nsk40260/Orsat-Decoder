@@ -339,3 +339,6 @@ dialog .hint.bad { color: var(--bad); }
 .chan .out.img.native { overflow-x: auto; }
 .chan .out.img.native .pic canvas { width: auto; max-width: none; }
 .chan.aligning .pic:last-child canvas { cursor: col-resize; outline: 2px dashed var(--c); outline-offset: -2px; }
+
+/* ---------- traduction des bulletins météo (RTTY) ---------- */
+.chan .out .tr { color: #8FD3E0; font: 13.5px/1.45 var(--font); white-space: normal; margin: 0 0 4px 1.5em; }

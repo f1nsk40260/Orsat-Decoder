@@ -7,6 +7,7 @@ sélectifs fréquents en ondes courtes.
 import numpy as np
 
 from ..dsp import Decoder, Mixer, FirDecim, lowpass, ToneFinder
+from ..meteo import Transcriber
 from ..tables import BAUDOT_LTRS, BAUDOT_FIGS, BAUDOT_LTRS_SHIFT, BAUDOT_FIGS_SHIFT
 
 
@@ -70,8 +71,13 @@ class RTTY(Decoder):
     name = "RTTY"
 
     def __init__(self, fs, af=1000.0, baud=45.45, shift=170.0, reverse=False, stop_bits=1.5, squelch=0.65, bw_factor=0.6,
-                 bits=5):
+                 bits=5, usos="auto", trad="auto"):
         super().__init__(fs, af)
+        # « unshift on space » (retour en lettres après une espace) : usage amateur ; les stations
+        # professionnelles à 50 bd (DWD…) ne le pratiquent pas : les chiffres sortiraient en lettres
+        self.usos = (float(baud) < 49) if usos == "auto" else bool(usos)
+        meteo = (float(baud) >= 49 and int(bits) == 5) if trad == "auto" else bool(trad)
+        self.tr = Transcriber() if meteo else None
         self.nbits = int(bits)        # 5 : Baudot ITA2 ; 7 ou 8 : ASCII (bit de poids faible en premier)
         self.baud, self.shift = float(baud), float(shift)
         self.demod = FSKDemod(fs, af, baud, shift, reverse, bw_factor)
@@ -135,7 +141,11 @@ class RTTY(Decoder):
                             self.held = (self.held + [ch])[-10:]
                         self.state = "idle"
             self.prev = v
-        return [{"t": "text", "text": "".join(out)}] if out else []
+        if not out:
+            return []
+        if self.tr is not None:
+            return self.tr.feed("".join(out))
+        return [{"t": "text", "text": "".join(out)}]
 
     @staticmethod
     def _ascii(code):
@@ -152,7 +162,7 @@ class RTTY(Decoder):
             self.figs = True
             return ""
         ch = (BAUDOT_FIGS if self.figs else BAUDOT_LTRS)[code]
-        if ch == " ":
+        if ch == " " and self.usos:
             self.figs = False                             # « unshift on space », usage courant
         if ch in "\x00\x07":
             return ""

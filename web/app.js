@@ -59,6 +59,7 @@ const H = {
   chan(m) { upsertChan(m); },
   chan_removed(m) { removeChanCard(m.ch); },
   text(m) { const c = S.chans.get(m.ch); if (c) { writeText(c, m.text); if (m.text.trim()) rxPulse(); } },
+  tr(m) { const c = S.chans.get(m.ch); if (c) writeTr(c, m.text); },
   msg(m) { const c = S.chans.get(m.ch); if (c) { writeMsg(c, m); rxPulse(); } },
   img(m) { const c = S.chans.get(m.ch); if (c) { onImage(c, m); rxPulse(); } },
   cstat(m) { const c = S.chans.get(m.ch); if (c) updateStat(c, m); },
@@ -647,6 +648,14 @@ function writeText(c, text) {
     if (ch === '\b') { c.cur.textContent = c.cur.textContent.slice(0, -1); continue; }
     c.cur.textContent += ch;
   }
+  if (atBottom) out.scrollTop = out.scrollHeight;
+}
+function writeTr(c, text) {
+  // traduction (bulletins météo) : sous la ligne qu'elle explique
+  const out = c.out;
+  const atBottom = out.scrollHeight - out.scrollTop - out.clientHeight < 40;
+  const d = el('div', { class: 'tr', text: '→ ' + text });
+  if (c.cur && c.cur.textContent === '' && c.cur.parentNode === out) out.insertBefore(d, c.cur); else out.append(d);
   if (atBottom) out.scrollTop = out.scrollHeight;
 }
 function writeMsg(c, m) {
