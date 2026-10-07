@@ -7,6 +7,11 @@ Réception en BLU avec la porteuse dans l'audio (cliquez sur la porteuse) :
 - WWV / WWVH : sous-porteuse à 100 Hz (impulsions de 0,2, 0,5 et 0,8 s) ;
 - CHU : trames FSK à 300 bauds (Bell 103) aux secondes 31 à 39.
 Une minute complète est nécessaire pour la date et l'heure ; d'ici là la carte montre la seconde en cours.
+
+DCF77, TDF, MSF, WWVB et JJY sont lus « à l'horloge » : la période exacte de la seconde (l'audio d'un
+WebSDR peut dériver de plus de 1000 ppm) et son début sont estimés en repliant les 40 dernières
+secondes ; chaque seconde est ensuite lue dans des fenêtres fixes (0-100 ms, 100-200 ms…), comparées
+aux niveaux habituels. Le bruit qui crée de fausses impulsions entre deux secondes est ainsi ignoré.
 """
 import time
 
@@ -16,6 +21,7 @@ from scipy.signal import firwin, lfilter
 from ..dsp import Decoder, Mixer, ToneFinder
 
 FR = 200.0                                    # cadence de l'enveloppe (Hz)
+FRI = int(FR)
 WEEKDAYS = ["", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
 
 
@@ -168,6 +174,16 @@ class TimeCode(Decoder):
         self.syms = {}
         self.count = 0
         self.carrier = None                     # dernière porteuse trouvée (Hz audio), pour l'état affiché
+        # lecture « à l'horloge »
+        self.clocked = station in ("dcf77", "tdf", "msf", "wwvb", "jjy")
+        self.ebuf = np.zeros(0)
+        self.ebuf0 = 0                          # indice absolu (à 200 Hz) de ebuf[0]
+        self.etot = 0
+        self.P = None                           # durée de la seconde (points à 200 Hz)
+        self.nxt = None                         # début (absolu, fractionnaire) de la prochaine seconde à lire
+        self.est_at = 0
+        self.far_d = None
+        self.actq, self.idleq = [], []
 
     def set_af(self, af):
         super().set_af(af)
@@ -176,7 +192,7 @@ class TimeCode(Decoder):
 
     def status(self):
         st = {"af": round(self.mix.freq, 1), "last": self.count, "sync": self.sec is not None}
-        if self.sec is not None:
+        if self.sec is not None and self.sec >= 0:
             st["info"] = f"seconde {self.sec}"
         elif self.carrier is None:
             st["info"] = f"porteuse introuvable près de {self.af0:.0f} Hz audio (cliquez dessus dans le mini-spectre)"
@@ -235,9 +251,119 @@ class TimeCode(Decoder):
         z = self.mix.process(x)
         z, self.zi = lfilter(self.lp, 1.0, z, zi=self.zi)
         out = []
+        if self.clocked:
+            self._clocked(self._active(z), out)
+            return out
         for v in self._active(z):
             self._point(v, out)
         return out
+
+    # -------------------------------------------------------------------------------- lecture à l'horloge
+    def _clocked(self, a, out):
+        self.ebuf = np.concatenate([self.ebuf, a])
+        self.etot += len(a)
+        if self.etot - self.est_at >= 2 * FRI and len(self.ebuf) >= 12 * FRI:
+            self.est_at = self.etot
+            self._estimate()
+        while self.P is not None and self.nxt + self.P + 2 <= self.etot:
+            self._slice(self.nxt, out)
+            self.nxt += self.P
+        keep = 45 * FRI
+        if len(self.ebuf) > keep:
+            cut = len(self.ebuf) - keep
+            if self.nxt is not None:
+                cut = min(cut, int(self.nxt) - self.ebuf0 - 2)
+            if cut > 0:
+                self.ebuf = self.ebuf[cut:]
+                self.ebuf0 += cut
+
+    @staticmethod
+    def _fold(seg, P, nb=100):
+        bins = np.floor((np.arange(len(seg)) % P) / P * nb).astype(int)
+        return np.bincount(bins, seg, nb) / np.maximum(np.bincount(bins, None, nb), 1)
+
+    def _estimate(self):
+        """Période et début des secondes, par repli des 40 dernières secondes."""
+        seg = self.ebuf[-40 * FRI:]
+        k0 = self.etot - len(seg)                                   # indice absolu de seg[0]
+        seg = seg - np.median(seg)
+        best = None
+        for P in np.arange(0.985, 1.015, 0.0005) * FR:
+            sc = self._fold(seg, P).std()
+            if best is None or sc > best[0]:
+                best = (sc, P)
+        for P in np.arange(best[1] - 0.0005 * FR, best[1] + 0.0005 * FR, 0.00002 * FRI):
+            sc = self._fold(seg, P).std()
+            if sc > best[0]:
+                best = (sc, P)
+        P = best[1]
+        prof = self._fold(seg, P)
+        ext = np.concatenate([prof, prof, prof])
+        # début de seconde : plus forte montée du niveau « actif » (60 ms après contre 250 ms avant)
+        c = [ext[100 + p:106 + p].mean() - ext[75 + p:97 + p].mean() for p in range(100)]
+        p = int(np.argmax(c))
+        onset = k0 + p / 100 * P
+        if self.P is None:
+            self.P = P
+            self.nxt = onset
+            while self.nxt - P >= self.ebuf0:
+                self.nxt -= P
+        else:
+            self.P = P
+            d = (onset - self.nxt + P / 2) % P - P / 2
+            # un premier calage faux (peu de secondes, bruit) : deux estimations de suite très
+            # différentes et concordantes font sauter directement au bon début de seconde
+            far = abs(d) > 0.06 * P
+            if far and self.far_d is not None and abs(d - self.far_d) < 0.03 * P:
+                self.nxt += d
+                self.far_d = None
+            else:
+                self.far_d = d if far else None
+                self.nxt += float(np.clip(0.5 * d, -3, 3))
+
+    def _m(self, s0, a, b):
+        i0 = int(round(s0 + a * self.P)) - self.ebuf0
+        i1 = int(round(s0 + b * self.P)) - self.ebuf0
+        return float(self.ebuf[max(0, i0):max(i0 + 1, i1)].mean())
+
+    def _slice(self, s0, out):
+        st = self.st
+        m = lambda a, b: self._m(s0, a, b)
+        idle_win = {"msf": (0.55, 0.95), "wwvb": (0.85, 0.97), "jjy": (0.85, 0.97)}.get(st, (0.4, 0.95))
+        self.actq = (self.actq + [m(0.02, 0.08)])[-30:]
+        self.idleq = (self.idleq + [m(*idle_win)])[-30:]
+        act, idle = float(np.median(self.actq)), float(np.median(self.idleq))
+        if act <= idle:
+            return
+        mid = (act + idle) / 2
+        on = lambda a, b: m(a, b) > mid
+        if st in ("dcf77", "tdf"):
+            sym = "-" if not on(0.02, 0.08) else (1 if on(0.12, 0.18) else 0)
+        elif st == "msf":
+            sym = "MARK" if on(0.35, 0.45) else (1 if on(0.12, 0.18) else 0, 1 if on(0.22, 0.28) else 0)
+        elif st == "wwvb":
+            sym = "M" if on(0.57, 0.73) else (1 if on(0.27, 0.43) else 0)
+        else:                                                         # JJY : durée de la pleine puissance
+            sym = 0 if on(0.57, 0.73) else (1 if on(0.27, 0.43) else "M")
+        self._seq(sym, out)
+
+    def _seq(self, sym, out):
+        st = self.st
+        prev, self.prev_sym = self.prev_sym, sym
+        if st in ("dcf77", "tdf") and sym == "-":                    # seconde 59 : la minute suivante commence
+            self._finish(out)
+            self.sec, self.syms = -1, {}
+            return
+        if (st == "msf" and sym == "MARK") or (st in ("wwvb", "jjy") and sym == "M" and prev == "M"):
+            self._finish(out)
+            self.sec, self.syms = 0, {0: sym}
+            return
+        if self.sec is not None:
+            self.sec += 1
+            if self.sec > 60:
+                self.sec, self.syms = None, {}
+                return
+            self.syms[self.sec] = sym
 
     def _point(self, v, out):
         self.env.append(v)
