@@ -228,7 +228,7 @@ class TimeCode(Decoder):
     def process(self, x):
         x = np.asarray(x, np.float64)
         if self.finder.feed(x):
-            fc = self.finder.find(self.af0, 150.0, min_ratio=20.0)
+            fc = self.finder.find(self.af0, 400.0, min_ratio=10.0)    # ±400 Hz : tout le mini-spectre
             self.carrier = fc
             if fc is not None and abs(fc - self.mix.freq) > 0.5:
                 self.mix.freq = fc
