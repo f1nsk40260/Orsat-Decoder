@@ -57,16 +57,28 @@ const H = {
   chans_reset() { for (const c of [...S.chans.keys()]) removeChanCard(c); },
   chan(m) { upsertChan(m); },
   chan_removed(m) { removeChanCard(m.ch); },
-  text(m) { const c = S.chans.get(m.ch); if (c) writeText(c, m.text); },
-  msg(m) { const c = S.chans.get(m.ch); if (c) writeMsg(c, m); },
-  img(m) { const c = S.chans.get(m.ch); if (c) onImage(c, m); },
+  text(m) { const c = S.chans.get(m.ch); if (c) { writeText(c, m.text); if (m.text.trim()) rxPulse(); } },
+  msg(m) { const c = S.chans.get(m.ch); if (c) { writeMsg(c, m); rxPulse(); } },
+  img(m) { const c = S.chans.get(m.ch); if (c) { onImage(c, m); rxPulse(); } },
   cstat(m) { const c = S.chans.get(m.ch); if (c) updateStat(c, m); },
   ident(m) { const c = S.chans.get(m.ch); if (c) renderIdent(c, m); },
   notice(m) { toast(m.text, m.level === 'error' ? 'error' : ''); },
   audio_inputs(m) { S.inputs = m.inputs || []; renderSources(); },
 };
 
-function setConn(text, cls) { const c = $('#conn'); c.textContent = text; c.className = 'conn ' + (cls || ''); }
+function setConn(text, cls) {
+  const c = $('#conn'); c.textContent = text; c.title = text; c.className = 'conn ' + (cls || '');
+  const led = $('#ledSrc'); led.className = 'led' + (cls === 'ok' ? ' on' : cls === 'bad' ? ' bad' : ''); led.title = text;
+}
+// voyants de l'en-tête : canaux ouverts, activité de décodage ; horloge UTC
+function updLeds() { $('#nCh').textContent = S.chans.size; $('#ledCh').classList.toggle('on', S.chans.size > 0); }
+let rxTimer = 0;
+function rxPulse() {
+  $('#ledRx').classList.add('act');
+  clearTimeout(rxTimer); rxTimer = setTimeout(() => $('#ledRx').classList.remove('act'), 1500);
+}
+function tickUtc() { $('#utc').textContent = new Date().toISOString().slice(11, 19); }
+tickUtc(); setInterval(tickUtc, 1000);
 
 const CODECS = { pcm: 'PCM', flac: 'FLAC', opus: 'Opus' };
 function onSource(info) {
@@ -322,6 +334,7 @@ function upsertChan(d) {
   if (!c) {
     c = { ...d, color: colorFor(d.id), lastSlot: null };
     S.chans.set(d.id, c);
+    updLeds();
     buildCard(c);
   } else {
     const keep = c.pendingFreq != null && Date.now() - (c.lastTune || 0) < 600 ? c.pendingFreq : null;
@@ -335,7 +348,7 @@ function upsertChan(d) {
 function removeChanCard(id) {
   const c = S.chans.get(id); if (!c) return;
   if (S.listen === id) { S.listen = null; send({ t: 'listen', ch: null }); }
-  c.card.remove(); S.chans.delete(id); placeMarkers();
+  c.card.remove(); S.chans.delete(id); updLeds(); placeMarkers();
   $('#chanEmpty').hidden = S.chans.size > 0;
 }
 function buildCard(c) {

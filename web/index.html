@@ -11,7 +11,7 @@
 <body>
 <div id="app">
   <header id="bar">
-    <div class="brand"><img src="icon.svg" alt=""><span>Orsat-Decoder</span><span id="ver" class="ver"></span></div>
+    <div class="brand"><img src="icon.svg" alt=""><span class="titles"><b>Orsat-Decoder</b><small>Décodeur multimode</small></span><span id="ver" class="ver"></span></div>
 
     <label class="pick" title="Source du signal : serveur PhantomSDR, TCI ou entrée audio">
       <span class="pick-lbl">Source</span>
@@ -26,6 +26,13 @@
     <span id="conn" class="conn">Connexion…</span>
 
     <div class="spacer"></div>
+
+    <div class="status" aria-label="État">
+      <span class="led" id="ledSrc" title="Connexion à la source"><i></i>Source</span>
+      <span class="led" id="ledCh" title="Canaux ouverts"><i></i><span><b id="nCh">0</b> canaux</span></span>
+      <span class="led" id="ledRx" title="S'allume quand un décodeur reçoit du texte ou une image"><i></i>Décodage</span>
+    </div>
+    <div class="clock" title="Heure UTC"><span id="utc">--:--:--</span><small>UTC</small></div>
 
     <div class="menu-wrap">
       <button id="presetBtn" class="btn" title="Signets : vos fréquences et les signaux identifiables">Signets</button>
