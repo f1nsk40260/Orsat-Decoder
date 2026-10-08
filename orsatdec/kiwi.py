@@ -23,7 +23,7 @@ log = logging.getLogger("orsat.kiwi")
 MAX_ZOOM, WF_BINS = 14, 1024
 IDENT = "Orsat-Decoder"
 # démodulation Orsat -> (mode Kiwi, passe-bande en Hz autour de la fréquence envoyée)
-MODES = {"USB": ("usb", 100, 3000), "CW": ("usb", 100, 3000), "LSB": ("lsb", -3000, -100),
+MODES = {"USB": ("usb", 100, 3000), "CWN": ("usb", 600, 1400), "CW": ("usb", 100, 3000), "LSB": ("lsb", -3000, -100),
          "AM": ("am", -5000, 5000), "FM": ("nbfm", -5500, 5500)}
 
 _seq = 0

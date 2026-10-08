@@ -23,7 +23,7 @@ log = logging.getLogger("orsat.owrx")
 AUDIO_RATE = 12000
 FFT_PAD = 10
 # démodulation Orsat -> (mode OpenWebRX, passe-bande autour de la fréquence envoyée)
-MODES = {"USB": ("usb", 100, 3000), "CW": ("usb", 100, 3000), "LSB": ("lsb", -3000, -100),
+MODES = {"USB": ("usb", 100, 3000), "CWN": ("usb", 600, 1400), "CW": ("usb", 100, 3000), "LSB": ("lsb", -3000, -100),
          "AM": ("am", -5000, 5000), "FM": ("nfm", -5500, 5500)}
 
 

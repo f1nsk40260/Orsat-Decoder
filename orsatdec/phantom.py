@@ -21,7 +21,8 @@ from .codecs import FlacStream, OpusStream
 log = logging.getLogger("orsat.phantom")
 
 # Bande passante audio extraite autour de la fréquence d'accord, par démodulation (Hz)
-SPANS = {"USB": (0, 3000), "LSB": (-3000, 0), "AM": (-5000, 5000), "FM": (-6000, 6000), "CW": (0, 3000)}
+SPANS = {"USB": (0, 3000), "LSB": (-3000, 0), "AM": (-5000, 5000), "FM": (-6000, 6000), "CW": (0, 3000),
+         "CWN": (600, 1400)}          # CW étroit : porteuse seule (signaux horaires), l'AGC du serveur la suit
 
 
 CLIENT_VERSION = 2          # marqueur ?v= attendu par les serveurs qui imposent min_client_version
@@ -150,7 +151,7 @@ class AudioChannel:
         if not self.info:
             return
         lo, hi = SPANS.get(self.mode, (0, 3000))
-        demod = "USB" if self.mode == "CW" else self.mode
+        demod = "USB" if self.mode in ("CW", "CWN") else self.mode
         m = self._bin(self.freq)
         l, r = int(np.floor(self._bin(self.freq + lo))), int(np.ceil(self._bin(self.freq + hi)))
         await self._send({"cmd": "demodulation", "demodulation": demod})
@@ -182,6 +183,10 @@ class AudioChannel:
                             if self.ask_pcm:
                                 await self._send({"cmd": "set_codec", "codec": "pcm"})
                             await self._send({"cmd": "agc_enable", "enabled": True})
+                            if self.mode == "CWN":
+                                # signaux horaires : AGC lente (relâchement 5 s), qui ne comble pas les
+                                # baisses de porteuse de 100 à 500 ms (PhantomSDR-Plus : commande « agc »)
+                                await self._send({"cmd": "agc", "speed": "custom", "attack": 50, "release": 5000})
                             await self._tune()
                             # le serveur ignore une démodulation reçue dans ses 100 premières ms
                             await asyncio.sleep(0.3)

@@ -254,7 +254,8 @@ _TIME = [("dcf77", "DCF77", "77,5 kHz, Allemagne (baisses de porteuse)."), ("msf
          ("jjy", "JJY", "40 et 60 kHz, Japon."), ("wwv", "WWV / WWVH", "2,5 à 20 MHz, sous-porteuse 100 Hz.")]
 MODES += [
     {"id": k, "label": lab, "family": "Signaux horaires", "desc": d + " Cliquez sur la porteuse ; une minute pour l'heure.",
-     "af": 1000, "bw": 60, "kind": "msg", "make": (lambda k: lambda fs, af, p: TimeCode(fs, af, k))(k)}
+     "af": 1000, "bw": 60, "kind": "msg", **({} if k == "wwv" else {"demod": "CWN"}),
+     "make": (lambda k: lambda fs, af, p: TimeCode(fs, af, k))(k)}
     for k, lab, d in _TIME
 ] + [
     {"id": "chu", "label": "CHU", "family": "Signaux horaires", "desc": "3330, 7850, 14670 kHz, Canada (FSK 300 bauds). Cliquez sur la porteuse.",

@@ -180,7 +180,8 @@ class PhantomSource(Source):
             ch.dial = ch.freq
         else:
             af = ch.freq - (ch.dial if ch.dial is not None else ch.freq - ch.mode["af"])
-            if self.LO <= af <= self.HI:
+            lo, hi = (ch.mode["af"] - 250, ch.mode["af"] + 250) if ch.mode.get("demod") == "CWN" else (self.LO, self.HI)
+            if lo <= af <= hi:
                 return True                       # le signal est encore dans l'audio reçu
             ch.dial = ch.freq - ch.mode["af"]
         if a:
