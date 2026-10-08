@@ -4,6 +4,8 @@ Réception en BLU avec la porteuse dans l'audio (cliquez sur la porteuse) :
 - DCF77, MSF, WWVB : la porteuse baisse au début de chaque seconde ; la durée de la baisse code le bit ;
 - JJY : c'est la durée de la pleine puissance qui code le bit ;
 - TDF : modulation de phase (±1 rad) au début de chaque seconde, un élément de 100 ms (0) ou deux (1) ;
+  le reste de la seconde porte une modulation de phase pseudo-aléatoire (synchronisation fine) : les
+  éléments de données sont donc reconnus par leur forme (filtre adapté), pas par la seule présence de modulation ;
 - WWV / WWVH : sous-porteuse à 100 Hz (impulsions de 0,2, 0,5 et 0,8 s) ;
 - CHU : trames FSK à 300 bauds (Bell 103) aux secondes 31 à 39.
 Une minute complète est nécessaire pour la date et l'heure ; d'ici là la carte montre la seconde en cours.
@@ -235,6 +237,9 @@ class TimeCode(Decoder):
             self.fmean += 0.005 * (dphi - self.fmean)              # écart de fréquence de la porteuse
             self.phi += dphi - self.fmean
             self.pmean += 0.02 * (self.phi - self.pmean)            # reste de dérive lente
+            if self.clocked:                                    # TDF : phase signée, pour le filtre adapté
+                out[i] = self.phi - self.pmean
+                continue
             self.pbuf.append(abs(self.phi - self.pmean))
             if len(self.pbuf) > 10:
                 del self.pbuf[0]
@@ -297,12 +302,21 @@ class TimeCode(Decoder):
             if sc > best[0]:
                 best = (sc, P)
         P = best[1]
-        prof = self._fold(seg, P)
-        ext = np.concatenate([prof, prof, prof])
-        # début de seconde : plus forte montée du niveau « actif » (60 ms après contre 250 ms avant)
-        c = [ext[100 + p:106 + p].mean() - ext[75 + p:97 + p].mean() for p in range(100)]
-        p = int(np.argmax(c))
-        onset = k0 + p / 100 * P
+        if self.st == "tdf":
+            # élément de données (toujours présent de 0 à 100 ms, sauf à la seconde 59) : meilleure
+            # corrélation du profil moyen avec le triangle, à 5 ms près
+            prof = self._fold(seg, P, 200)
+            ext = np.concatenate([prof, prof[:20]])
+            tri = self._tri(20)
+            c = [abs(np.dot(ext[q:q + 20], tri)) for q in range(200)]
+            onset = k0 + int(np.argmax(c)) / 200 * P
+        else:
+            prof = self._fold(seg, P)
+            ext = np.concatenate([prof, prof, prof])
+            # début de seconde : plus forte montée du niveau « actif » (60 ms après contre 250 ms avant)
+            c = [ext[100 + p:106 + p].mean() - ext[75 + p:97 + p].mean() for p in range(100)]
+            p = int(np.argmax(c))
+            onset = k0 + p / 100 * P
         if self.P is None:
             self.P = P
             self.nxt = onset
@@ -321,6 +335,22 @@ class TimeCode(Decoder):
                 self.far_d = d if far else None
                 self.nxt += float(np.clip(0.5 * d, -3, 3))
 
+    @staticmethod
+    def _tri(n):
+        """Élément TDF : phase 0 → +1 rad (25 ms) → −1 rad (75 ms) → 0 (100 ms)."""
+        u = (np.arange(n) + 0.5) / n
+        t = np.where(u < 0.25, 4 * u, np.where(u < 0.75, 2 - 4 * u, 4 * u - 4))
+        return t / np.sqrt(np.sum(t * t))
+
+    def _corr(self, s0, a):
+        """|corrélation| de la phase avec l'élément TDF commençant à a (fraction de seconde)."""
+        n = max(8, int(round(0.1 * self.P)))
+        i0 = int(round(s0 + a * self.P)) - self.ebuf0
+        seg = self.ebuf[max(0, i0):max(0, i0) + n]
+        if len(seg) < n:
+            return 0.0
+        return abs(float(np.dot(seg - seg.mean(), self._tri(n))))
+
     def _m(self, s0, a, b):
         i0 = int(round(s0 + a * self.P)) - self.ebuf0
         i1 = int(round(s0 + b * self.P)) - self.ebuf0
@@ -328,6 +358,14 @@ class TimeCode(Decoder):
 
     def _slice(self, s0, out):
         st = self.st
+        if st == "tdf":
+            e1, e2 = self._corr(s0, 0.0), self._corr(s0, 0.1)
+            self.actq = (self.actq + [e1])[-30:]
+            ref = float(np.percentile(self.actq, 75))           # élément présent (59 secondes sur 60)
+            if ref <= 1e-9:
+                return
+            self._seq("-" if e1 < 0.5 * ref else (1 if e2 > 0.5 * ref else 0), out)
+            return
         m = lambda a, b: self._m(s0, a, b)
         idle_win = {"msf": (0.55, 0.95), "wwvb": (0.85, 0.97), "jjy": (0.85, 0.97)}.get(st, (0.4, 0.95))
         self.actq = (self.actq + [m(0.02, 0.08)])[-30:]

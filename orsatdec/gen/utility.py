@@ -330,6 +330,9 @@ def wwv_syms(y, doy, h, mi):
     return s
 
 
+_TDF_PRN = np.random.default_rng(162).choice([-1.0, 1.0], 700)       # bribes de 1 ms
+
+
 def timecode_encode(station, minutes, fs=12000, af=1000.0, start_sec=50, amp=0.5):
     """minutes : liste de minutes à annoncer, (année, mois, jour, jour semaine, heure, minute).
     Le signal commence à la seconde start_sec de la minute qui précède la première."""
@@ -363,6 +366,10 @@ def timecode_encode(station, minutes, fs=12000, af=1000.0, start_sec=50, amp=0.5
             k = int((0.1 if v == 0 else 0.2) * fs)
             ph_t = (t[:k] % 0.1) / 0.1                     # rampes +1, -2, +1 rad (triangle)
             pm[:k] = np.where(ph_t < 0.25, 4 * ph_t, np.where(ph_t < 0.75, 2 - 4 * ph_t, 4 * ph_t - 4))
+        if station == "tdf":
+            # modulation pseudo-aléatoire du reste de la seconde (200 à 900 ms, ±1 rad, même suite chaque seconde)
+            a0, a1 = int(0.2 * fs), int(0.9 * fs)
+            pm[a0:a1] = np.repeat(_TDF_PRN, int(np.ceil((a1 - a0) / len(_TDF_PRN))))[:a1 - a0]
         elif station == "msf":
             a, b, mark = v
             env[:int(0.1 * fs)] = 0.0
