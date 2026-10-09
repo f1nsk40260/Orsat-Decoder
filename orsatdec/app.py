@@ -636,7 +636,17 @@ def make_web(app):
     w = web.Application()
 
     async def index(request):
-        return web.FileResponse(WEB / "index.html", headers={"Cache-Control": "no-cache"})
+        # app.js et style.css portent une marque de version : après une mise à jour, le navigateur
+        # ne peut pas garder l'ancienne copie en cache avec la nouvelle page
+        html = (WEB / "index.html").read_text(encoding="utf-8")
+        for name in ("style.css", "app.js"):
+            stamp = int((WEB / name).stat().st_mtime)
+            html = html.replace(f'"{name}"', f'"{name}?v={stamp}"')
+        return web.Response(text=html, content_type="text/html", headers={"Cache-Control": "no-cache"})
+
+    async def no_cache(request, response):
+        if not request.path.startswith("/vendor/"):
+            response.headers.setdefault("Cache-Control", "no-cache")
 
     async def ws_handler(request):
         ws = web.WebSocketResponse(heartbeat=10, max_msg_size=1 << 20)
@@ -658,6 +668,7 @@ def make_web(app):
     w.router.add_get("/", index)
     w.router.add_get("/ws", ws_handler)
     w.router.add_static("/", WEB, show_index=False)
+    w.on_response_prepare.append(no_cache)
     return w
 
 
