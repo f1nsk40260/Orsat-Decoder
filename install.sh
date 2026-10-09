@@ -93,9 +93,18 @@ step "5/6  Bibliothèque de signaux (images et sons de référence, hors ligne)"
 REFDIR="$APPDIR/references"
 REFURL="https://github.com/f1nsk40260/Orsat-Decoder/releases/download/bibliotheque"
 have="$(cat "$REFDIR/VERSION" 2>/dev/null || true)"
-pack=""
+pack=""; dl=""
 if [ -n "${ORSAT_REFPACK:-}" ] && [ -f "$ORSAT_REFPACK" ]; then pack="$ORSAT_REFPACK"
 elif [ -f "$HERE/orsat-references.tar" ]; then pack="$HERE/orsat-references.tar"
+else
+  # pack déposé dans le dossier de téléchargements : installé s'il est d'une autre version
+  for f in "$HOME/Téléchargements/orsat-references.tar" "$HOME/Downloads/orsat-references.tar"; do
+    if [ -f "$f" ]; then
+      v="$(tar xOf "$f" VERSION 2>/dev/null | tr -cd '0-9.')"
+      if [ -n "$v" ] && [ "$v" != "$have" ]; then pack="$f"; fi
+      break
+    fi
+  done
 fi
 if [ -z "$pack" ]; then
   want="$(curl -fsSL "$REFURL/references.version" 2>/dev/null || wget -qO- "$REFURL/references.version" 2>/dev/null || true)"
@@ -106,9 +115,9 @@ if [ -z "$pack" ]; then
     info "Version $have déjà installée."
   else
     info "Téléchargement de la version $want (environ 85 Mo, une seule fois)…"
-    pack="$(mktemp --suffix=.tar)"
+    pack="$(mktemp --suffix=.tar)"; dl="$pack"
     if ! { curl -fL --progress-bar "$REFURL/orsat-references.tar" -o "$pack" 2>/dev/null || wget -q --show-progress -O "$pack" "$REFURL/orsat-references.tar"; }; then
-      rm -f "$pack"; pack=""; info "${dim}Téléchargement impossible ; nouvel essai à la prochaine mise à jour.${off}"
+      rm -f "$pack"; pack=""; dl=""; info "${dim}Téléchargement impossible ; nouvel essai à la prochaine mise à jour.${off}"
     fi
   fi
 fi
@@ -120,7 +129,7 @@ if [ -n "$pack" ]; then
   else
     rm -rf "$REFDIR.new"; info "${dim}Pack de références illisible : ignoré.${off}"
   fi
-  case "$pack" in /tmp/*) rm -f "$pack" ;; esac
+  if [ -n "$dl" ]; then rm -f "$dl"; fi   # seulement la copie téléchargée ici, jamais un pack fourni
 fi
 
 # -------------------------------------------------------------------------------------
