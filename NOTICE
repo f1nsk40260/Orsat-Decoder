@@ -16,5 +16,9 @@ Les licences ci-dessous exigent que ces mentions accompagnent toute copie du log
   Orsat-Decoder : fldigi (W1HKJ et contributeurs), dumphfdl (Tomasz Lemiesz), JS8Call (Jordan
   Sherer KN4CRD), WSJT-X (K1JT et contributeurs), acarsdec (Thierry Leconte, LGPL).
 - orsatdec/data/sigid.json : dérivé d'Artemis-DB (GPL-3).
+- Bibliothèque de signaux (pack de références installé dans ~/Orsat-Decoder/references : fiches,
+  images de spectre et extraits sonores) : base Artemis-DB d'AresValley (https://github.com/AresValley/Artemis-DB),
+  issue du Signal Identification Wiki (https://www.sigidwiki.com) et de ses contributeurs. Images et sons
+  recompressés pour l'usage hors ligne.
 - Fond de carte en ligne : © contributeurs OpenStreetMap (mention affichée sur la carte, exigée par
   les conditions d'utilisation des tuiles).

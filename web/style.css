@@ -407,3 +407,47 @@ dialog .hint.bad { color: var(--bad); }
   fill: none; stroke: var(--gold); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; animation: pickBob 1.6s ease-in-out infinite; }
 .pick-mode input:not(:placeholder-shown) ~ .pick-arrow { display: none; }
 @keyframes pickBob { 0%, 100% { transform: translateY(-2px); } 50% { transform: translateY(2px); } }
+
+/* ---------- panneau « Comparer » (bibliothèque de signaux) ---------- */
+dialog.cmp { width: min(1180px, 96vw); max-height: 94vh; overflow-y: auto; }
+.cmp-wrap { padding: 14px 18px 12px; display: grid; gap: 12px; }
+.cmp-head { display: flex; align-items: center; gap: 16px; }
+.cmp-head h2 { margin: 0; font-size: 17px; color: var(--gold); letter-spacing: .04em; }
+.cmp-head .icon-btn { margin-left: auto; }
+.cmp-nav { display: flex; align-items: center; gap: 8px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.cmp-nav .zbtn[disabled] { opacity: .35; cursor: default; }
+.cmp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.cmp-grid:has(#cmpMine[hidden]) { grid-template-columns: 1fr; }
+.cmp-side { background: #141E28; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: grid; gap: 8px; align-content: start; min-width: 0; }
+.cmp-side h3 { margin: 0; font-size: 14px; color: var(--gold); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cmp-view { position: relative; height: 300px; border-radius: 6px; overflow: hidden; background: #05080b; border: 1px solid #2C3C4C; }
+.cmp-view canvas { width: 100%; height: 100%; display: block; }
+.cmp-view img { width: 100%; height: 100%; object-fit: contain; display: block; background: #000; }
+.cmp-msg { position: absolute; inset: 0; margin: 0; display: grid; place-items: center; text-align: center; padding: 20px;
+  color: var(--muted); font-size: 13px; pointer-events: none; }
+.cmp-msg:empty { display: none; }
+.cmp-audio { display: flex; gap: 8px; align-items: center; }
+.cmp-audio audio { flex: 1; min-width: 0; height: 34px; color-scheme: dark; }
+#cmpLive.on { color: #10161d; background: var(--fluo); border-color: var(--fluo); }
+.cmp-meas, .cmp-scale { margin: 0; font-size: 12px; color: var(--muted); }
+.cmp-meas b { color: var(--text); font-weight: 400; }
+.cmp-tabs { display: flex; gap: 4px; }
+.cmp-tab { background: none; border: 1px solid var(--line); border-radius: 6px; padding: 3px 10px; font-size: 12px; color: var(--muted); }
+.cmp-tab.on { color: #1A1206; background: linear-gradient(180deg, #F2D78A, #B58D36); border-color: #F2D78A; font-weight: 700; }
+.cmp-card:empty { display: none; }
+.cmp-fiche { background: #141E28; border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; display: grid; gap: 8px; }
+.cmp-cats { display: flex; gap: 6px; flex-wrap: wrap; }
+.cmp-short { margin: 0; }
+.cmp-rows { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 4px 18px; }
+.cmp-row { display: flex; gap: 8px; font-size: 13px; }
+.cmp-row span { color: var(--muted); min-width: 86px; }
+.cmp-row b { font-weight: 600; }
+.cmp-fiche summary { cursor: pointer; color: var(--gold); font-size: 13px; }
+.cmp-desc { max-height: 220px; overflow-y: auto; font-size: 13px; color: #C5D0DA; padding-right: 6px; }
+.cmp-desc p { margin: 6px 0; }
+.cmp-foot { display: flex; align-items: center; gap: 10px; }
+.cmp-why { font-size: 12.5px; color: var(--muted); }
+.cmp-yes { width: auto; min-width: 0; }
+.cmp-credit { margin: 0; text-align: right; font-size: 11px; color: #6E8193; }
+.cmp-btn { color: var(--gold); }
+@media (max-width: 900px) { .cmp-grid { grid-template-columns: 1fr; } }

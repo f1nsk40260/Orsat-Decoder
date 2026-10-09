@@ -877,6 +877,7 @@ function openFound(c, o) {
   addChannel(o.mode, o.freq, o.params, c.id);       // le canal d'identification cède sa place
 }
 function renderIdent(c, m) {
+  c.lastIdent = m;
   const out = c.out; out.replaceChildren();
   if (m.error) { out.append(el('p', { class: 'id-none', text: m.error })); return; }
   if (m.measure) { const p = el('p', { class: 'id-meas' }); p.innerHTML = fmtMeasure(m.measure); out.append(p); }
@@ -888,6 +889,9 @@ function renderIdent(c, m) {
         el('b', { text: k.label }), el('span', { class: 'id-par', text: paramText(k.mode, k.params) })),
       el('div', { class: 'id-text', text: k.text }));
     if (!auto) box.append(el('button', { class: 'btn', type: 'button', text: `Ouvrir un canal ${k.label}`, onclick: () => openFound(c, m.open) }));
+    if (k.id != null) box.append(el('button', { class: 'btn cmp-btn', type: 'button', text: 'Comparer',
+      title: 'Comparer avec le signal de référence de la bibliothèque (image et son)',
+      onclick: () => openCompare(c, [{ id: k.id, title: k.label, why: ['décodage'], open: m.open }], 0) }));
     out.append(box);
   } else if (m.phase === 'candidats') {
     out.append(el('p', { class: 'id-wait', text: m.candidates.some(x => x.decodable) ? 'Vérification par décodage des candidats…' : '' }));
@@ -906,6 +910,9 @@ function renderIdent(c, m) {
         el('span', { class: 'id-title', text: k.title }),
         k.variant ? el('span', { class: 'id-var', text: k.variant.label }) : null,
         el('span', { class: 'id-bar', title: `note ${k.score}` }, el('i', { style: `width:${pct}%` })),
+        el('button', { class: 'icon-btn small cmp-btn', type: 'button', text: 'Comparer',
+          title: 'Comparer votre signal avec la référence de la bibliothèque (waterfall et son)',
+          onclick: () => openCompare(c, m.candidates, m.candidates.indexOf(k)) }),
         k.open ? el('button', { class: 'icon-btn small', type: 'button', text: 'Ouvrir', title: 'Ouvrir un canal dans ce mode',
           onclick: () => openFound(c, k.open) }) : null),
       el('div', { class: 'id-why', text: k.why.length ? 'Concorde : ' + k.why.map(w => WHY[w] || w).join(', ') : 'ressemblance faible' }));
@@ -913,6 +920,238 @@ function renderIdent(c, m) {
   }
   out.append(ol);
 }
+// ------------------------------------------------------------------ comparaison avec la bibliothèque
+// Panneau « Comparer » : votre signal (audio écouté par l'identification) et la référence de la bibliothèque,
+// toutes deux redessinées en waterfall à la même échelle (Hz par pixel, secondes par ligne, palette).
+const CMP = { c: null, list: [], i: 0, index: null, mineBuf: null, mineUrl: null, tab: 'calc', seq: 0 };
+const CMP_SECONDS = 10;
+async function refIndex() {
+  if (CMP.index) return CMP.index;
+  try { CMP.index = await (await fetch('/ref/index.json')).json(); } catch { CMP.index = { signals: [] }; }
+  CMP.byId = new Map((CMP.index.signals || []).map(x => [x.id, x]));
+  return CMP.index;
+}
+async function decodeUrl(url) {
+  const r = await fetch(url); if (!r.ok) throw new Error(r.status);
+  const ab = await r.arrayBuffer();
+  return new OfflineAudioContext(1, 1, 48000).decodeAudioData(ab);
+}
+function fftMag(re, im) {                       // FFT radix 2 en place, puis puissance dans re
+  const n = re.length;
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1; for (; j & bit; bit >>= 1) j ^= bit; j ^= bit;
+    if (i < j) { [re[i], re[j]] = [re[j], re[i]]; [im[i], im[j]] = [im[j], im[i]]; }
+  }
+  for (let len = 2; len <= n; len <<= 1) {
+    const a = -2 * Math.PI / len, wr = Math.cos(a), wi = Math.sin(a);
+    for (let i = 0; i < n; i += len) {
+      let cr = 1, ci = 0;
+      for (let k = 0; k < len / 2; k++) {
+        const p = i + k, q = p + len / 2;
+        const tr = re[q] * cr - im[q] * ci, ti = re[q] * ci + im[q] * cr;
+        re[q] = re[p] - tr; im[q] = im[p] - ti; re[p] += tr; im[p] += ti;
+        const t = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = t;
+      }
+    }
+  }
+  for (let i = 0; i < n / 2; i++) re[i] = re[i] * re[i] + im[i] * im[i];
+}
+function avgSpectrum(x, sr, N = 4096) {
+  const acc = new Float64Array(N / 2), win = hann(N); let frames = 0;
+  for (let o = 0; o + N <= x.length && frames < 200; o += N) {
+    const re = new Float64Array(N), im = new Float64Array(N);
+    for (let i = 0; i < N; i++) re[i] = x[o + i] * win[i];
+    fftMag(re, im); for (let i = 0; i < N / 2; i++) acc[i] += re[i]; frames++;
+  }
+  return { acc, hz: sr / N };
+}
+const HANN = {};
+function hann(N) { return HANN[N] ||= Float64Array.from({ length: N }, (_, i) => 0.5 - 0.5 * Math.cos(2 * Math.PI * i / N)); }
+function findSignal(x, sr) {
+  // centre du signal dans un enregistrement de référence : barycentre de l'énergie au-dessus du bruit
+  const { acc, hz } = avgSpectrum(x, sr);
+  const lo = Math.round(80 / hz), hi = Math.min(acc.length - 1, Math.round((sr / 2 - 80) / hz));
+  const db = Array.from(acc.slice(lo, hi), v => 10 * Math.log10(v + 1e-20));
+  const sorted = [...db].sort((a, b) => a - b), floor = sorted[Math.floor(sorted.length * 0.3)], top = sorted[sorted.length - 1];
+  const thr = floor + Math.max(6, (top - floor) * 0.35);
+  let sw = 0, sx = 0, f1 = Infinity, f2 = 0;
+  db.forEach((v, i) => { if (v > thr) { const w = 10 ** ((v - thr) / 10); sw += w; sx += w * (i + lo); f1 = Math.min(f1, (i + lo) * hz); f2 = Math.max(f2, (i + lo) * hz); } });
+  return sw ? { fc: sx / sw * hz, bw: Math.max(50, f2 - f1) } : { fc: sr / 4, bw: sr / 2 };
+}
+function drawSpectro(cv, buf, fc, span) {
+  const dpr = devicePixelRatio || 1, r = cv.getBoundingClientRect();
+  const W = cv.width = Math.max(200, Math.round(r.width * dpr)), H = cv.height = Math.max(150, Math.round(r.height * dpr));
+  const g = cv.getContext('2d'); g.fillStyle = '#05080b'; g.fillRect(0, 0, W, H);
+  if (!buf) return;
+  const x = buf.getChannelData(0), sr = buf.sampleRate;
+  const N = Math.min(16384, Math.max(1024, 2 ** Math.ceil(Math.log2(sr / (span / W) * 0.7))));
+  const hop = sr * CMP_SECONDS / H, rows = Math.min(H, Math.floor((x.length - N) / hop) + 1);
+  const f0 = fc - span / 2, hz = sr / N, win = hann(N);
+  const img = new Float32Array(W * H).fill(NaN);
+  const re = new Float64Array(N), im = new Float64Array(N);
+  for (let y = 0; y < rows; y++) {
+    const o = Math.round(y * hop);
+    for (let i = 0; i < N; i++) { re[i] = (x[o + i] || 0) * win[i]; im[i] = 0; }
+    fftMag(re, im);
+    for (let px = 0; px < W; px++) {
+      const a = Math.floor((f0 + px * span / W) / hz), b = Math.max(a + 1, Math.floor((f0 + (px + 1) * span / W) / hz));
+      let m = 0;
+      for (let k = a; k < b; k++) if (k > 0 && k < N / 2 && re[k] > m) m = re[k];
+      img[y * W + px] = 10 * Math.log10(m + 1e-20);
+    }
+  }
+  const vals = Array.from(img).filter(v => !isNaN(v)).sort((p, q) => p - q);
+  if (!vals.length) return;
+  const lo = vals[Math.floor(vals.length * 0.25)], hi = vals[Math.floor(vals.length * 0.997)];
+  const out = g.createImageData(W, H), lut = WF.lut;
+  for (let i = 0; i < W * H; i++) {
+    const v = img[i]; if (isNaN(v)) { out.data[i * 4 + 3] = 255; continue; }
+    const t = Math.max(0, Math.min(255, Math.round((v - lo) / (hi - lo || 1) * 255)));
+    out.data[i * 4] = lut[t * 4]; out.data[i * 4 + 1] = lut[t * 4 + 1]; out.data[i * 4 + 2] = lut[t * 4 + 2]; out.data[i * 4 + 3] = 255;
+  }
+  g.putImageData(out, 0, 0);
+  // repères de fréquence (relatifs au centre du signal)
+  const step = niceStep(span, W / dpr);
+  g.font = `${11 * dpr}px ${getComputedStyle(document.body).fontFamily}`; g.textAlign = 'center';
+  for (let d = Math.ceil(-span / 2 / step) * step; d <= span / 2; d += step) {
+    const px = (d + span / 2) / span * W;
+    g.fillStyle = '#ffffff55'; g.fillRect(Math.round(px), 0, 1, 7 * dpr);
+    g.fillStyle = '#ffffffcc'; g.fillText((d > 0 ? '+' : '') + Math.round(d), px, 19 * dpr);
+  }
+}
+function cmpSpan(mine, ref) {
+  const bw = Math.max(mine?.bw || 0, ref?.bw || 0, 200);
+  return Math.min(6000, Math.max(500, bw * 2.2));
+}
+async function openCompare(c, list, i) {
+  await refIndex();
+  CMP.c = c; CMP.list = list.filter(k => k && k.id != null); CMP.i = Math.max(0, Math.min(i, CMP.list.length - 1));
+  CMP.mineBuf = null;
+  if (CMP.mineUrl) { URL.revokeObjectURL(CMP.mineUrl); CMP.mineUrl = null; }
+  const d = $('#cmpDialog'); if (!d.open) d.showModal();
+  $('#cmpMine').hidden = !c;
+  $('#cmpLive').hidden = !c;
+  $('#cmpMineMsg').textContent = c ? 'Chargement de votre signal…' : '';
+  if (c) {
+    try {
+      const r = await fetch(`/capture/${c.id}.wav`);
+      if (!r.ok) throw new Error();
+      const blob = await r.blob(); CMP.mineUrl = URL.createObjectURL(blob);
+      $('#cmpMineAu').src = CMP.mineUrl;
+      CMP.mineBuf = await new OfflineAudioContext(1, 1, 48000).decodeAudioData(await blob.arrayBuffer());
+      $('#cmpMineMsg').textContent = '';
+    } catch { $('#cmpMineMsg').textContent = 'Écoute en cours : votre signal sera disponible à la fin de l\'écoute.'; }
+    const m = c.lastIdent?.measure;
+    $('#cmpMeas').innerHTML = m ? fmtMeasure(m) : '';
+  }
+  showCompare();
+}
+async function showCompare() {
+  const seq = ++CMP.seq, k = CMP.list[CMP.i];
+  const n = CMP.list.length;
+  $('#cmpPos').textContent = n > 1 ? `${CMP.i + 1} / ${n}` : '';
+  $('#cmpPrev').disabled = CMP.i <= 0; $('#cmpNext').disabled = CMP.i >= n - 1;
+  $('.cmp-nav').hidden = n <= 1;
+  $('#cmpRefTitle').textContent = k ? `Référence : ${k.title}` : 'Référence';
+  $('#cmpWhy').textContent = k && k.why ? (k.why.length ? 'Concorde : ' + k.why.map(w => WHY[w] || w).join(', ') : 'ressemblance faible') : '';
+  $('#cmpYes').textContent = k?.open ? `C'est ce signal : ouvrir ${S.byId[k.open.mode]?.label || ''}` : "C'est ce signal";
+  $('#cmpYes').hidden = $('#cmpNo').hidden = !CMP.c;
+  const card = $('#cmpCard'); card.replaceChildren();
+  const refAu = $('#cmpRefAu'), refImg = $('#cmpRefImg');
+  refAu.removeAttribute('src'); refAu.load(); refImg.removeAttribute('src');
+  const info = k && CMP.byId.get(k.id);
+  const mineM = CMP.c?.lastIdent?.measure;
+  if (!info) {
+    $('#cmpRefMsg').textContent = CMP.index.signals?.length ? 'Ce signal n\'a pas de fiche dans la bibliothèque.'
+      : 'Bibliothèque de référence non installée : relancez la mise à jour (get.sh) pour l\'installer.';
+    drawSpectro($('#cmpRefCv'), null); drawMine(mineM, null);
+    return;
+  }
+  $('#cmpRefMsg').textContent = 'Chargement de la référence…';
+  let fiche = null;
+  try { fiche = await (await fetch(`/ref/${k.id}/signal.json`)).json(); } catch { }
+  if (seq !== CMP.seq) return;
+  if (fiche) card.append(renderFiche(fiche));
+  if (info.has_img) refImg.src = `/ref/${k.id}/spectre.webp`;
+  let refBuf = null, refSig = null;
+  if (info.has_snd) {
+    refAu.src = `/ref/${k.id}/son.opus`;
+    try { refBuf = await decodeUrl(`/ref/${k.id}/son.opus`); refSig = findSignal(refBuf.getChannelData(0), refBuf.sampleRate); } catch { }
+  }
+  if (seq !== CMP.seq) return;
+  if (refSig && fiche?.bw && fiche.bw < refSig.bw * 3) refSig.bw = Math.max(refSig.bw, fiche.bw);
+  CMP.ref = { buf: refBuf, sig: refSig };
+  $('#cmpRefMsg').textContent = refBuf ? '' : info.has_img ? 'Pas de son de référence : voyez l\'image d\'origine.' : 'Ni image ni son pour ce signal.';
+  if (!refBuf && info.has_img) setCmpTab('img'); else setCmpTab(CMP.tab);
+  drawCompare();
+}
+function drawMine(m, span) {
+  drawSpectro($('#cmpMineCv'), CMP.mineBuf && m ? CMP.mineBuf : null, m?.fc, span || cmpSpan(m, null));
+}
+function drawCompare() {
+  const m = CMP.c?.lastIdent?.measure, ref = CMP.ref || {};
+  const span = cmpSpan(m, ref.sig);
+  drawMine(m, span);
+  drawSpectro($('#cmpRefCv'), ref.buf, ref.sig?.fc, span);
+  $('#cmpScale').textContent = `Même échelle des deux côtés : ${Math.round(span).toLocaleString('fr-FR')} Hz de large, ${CMP_SECONDS} s de haut, centré sur le signal.`;
+}
+function setCmpTab(t) {
+  CMP.tab = t === 'img' ? 'img' : 'calc';
+  document.querySelectorAll('.cmp-tab').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
+  $('#cmpRefCv').hidden = t === 'img'; $('#cmpRefImg').hidden = t !== 'img';
+  $('#cmpScale').hidden = t === 'img';
+}
+function mdLite(t) {                       // gras et paragraphes de la description, sans HTML importé
+  const p = el('div', { class: 'cmp-desc' });
+  for (const para of t.split(/\n{2,}/).slice(0, 8)) {
+    const e = el('p');
+    para.split(/(\*\*[^*]+\*\*)/).forEach(part => e.append(/^\*\*.*\*\*$/.test(part) ? el('b', { text: part.slice(2, -2) }) : part));
+    p.append(e);
+  }
+  return p;
+}
+function fmtHz(v) { return v >= 1e6 ? `${(v / 1e6).toLocaleString('fr-FR', { maximumFractionDigits: 4 })} MHz`
+  : v >= 1e3 ? `${(v / 1e3).toLocaleString('fr-FR', { maximumFractionDigits: 3 })} kHz` : `${Math.round(v)} Hz`; }
+function renderFiche(f) {
+  const row = (lab, val) => val ? el('div', { class: 'cmp-row' }, el('span', { text: lab }), el('b', { text: val })) : null;
+  const freqs = f.freqs.length > 6 ? `${fmtHz(f.fmin)} à ${fmtHz(f.fmax)}` : f.freqs.map(fmtHz).join(', ');
+  const box = el('div', { class: 'cmp-fiche' },
+    el('div', { class: 'cmp-cats' }, ...f.cat.map(x => el('span', { class: 'id-var', text: x }))),
+    f.short ? el('p', { class: 'cmp-short', text: f.short }) : null,
+    el('div', { class: 'cmp-rows' },
+      row('Fréquences', freqs), row('Largeur', f.bw ? fmtHz(f.bw) : ''), row('Modulation', f.mod.join(', ')),
+      row('Mode', f.mode.join(', ')), row('ACF', f.acf.map(a => `${a} ms`).join(', ')), row('Lieux', f.loc.join(', '))));
+  if (f.desc) {
+    const det = el('details', {}, el('summary', { text: 'Description complète' }), mdLite(f.desc));
+    box.append(det);
+  }
+  return box;
+}
+async function cmpDecide(ok) {
+  const k = CMP.list[CMP.i], c = CMP.c; if (!k || !c) return;
+  try { await fetch('/confirm', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: k.id, ok, measure: c.lastIdent?.measure, rf: c.freq }) }); } catch { }
+  if (ok) {
+    $('#cmpDialog').close();
+    if (k.open) openFound(c, k.open);
+    else toast(`Identification notée : ${k.title}.`);
+  } else if (CMP.i < CMP.list.length - 1) { CMP.i++; showCompare(); }
+  else toast('C\'était le dernier candidat.');
+}
+function wireCompare() {
+  $('#cmpClose').onclick = () => $('#cmpDialog').close();
+  $('#cmpDialog').addEventListener('close', () => { $('#cmpMineAu').pause(); $('#cmpRefAu').pause(); CMP.seq++; });
+  $('#cmpPrev').onclick = () => { if (CMP.i > 0) { CMP.i--; showCompare(); } };
+  $('#cmpNext').onclick = () => { if (CMP.i < CMP.list.length - 1) { CMP.i++; showCompare(); } };
+  document.querySelectorAll('.cmp-tab').forEach(b => b.onclick = () => setCmpTab(b.dataset.tab));
+  $('#cmpYes').onclick = () => cmpDecide(true);
+  $('#cmpNo').onclick = () => cmpDecide(false);
+  $('#cmpLive').onclick = () => { if (CMP.c) { toggleListen(CMP.c); $('#cmpLive').classList.toggle('on', S.listen === CMP.c.id); } };
+  // une seule source sonore à la fois
+  $('#cmpMineAu').addEventListener('play', () => $('#cmpRefAu').pause());
+  $('#cmpRefAu').addEventListener('play', () => $('#cmpMineAu').pause());
+}
+
 function paramText(mode, params) {
   const md = S.byId[mode]; if (!md || !params) return '';
   return (md.params || []).filter(p => p.key in params && p.key !== 'reverse')
@@ -1301,4 +1540,4 @@ function wire() {
   $('#quitBtn').onclick = () => { if (confirm('Quitter Orsat-Decoder ?')) { send({ t: 'quit' }); setTimeout(() => window.close(), 500); } };
   addEventListener('resize', placeMarkers);
 }
-wire(); initWaterfall(); connect();
+wire(); wireCompare(); initWaterfall(); connect();

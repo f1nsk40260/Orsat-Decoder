@@ -27,6 +27,7 @@ Désinstallation : `~/Orsat-Decoder/uninstall.sh`.
 - **Carnet de serveurs** : on ajoute l'adresse d'un récepteur web, son type est reconnu tout seul, et il
   reste dans la liste des sources pour les fois suivantes.
 - **Identification automatique** des signaux inconnus, confirmée par décodage.
+- **Comparaison avec la bibliothèque de signaux** (583 signaux de la base Artemis) : waterfall et son de référence à côté de votre signal, hors ligne.
 - **Signets** modifiables, affichés sous l'échelle du waterfall.
 - **Annuaire** de 257 signaux identifiables avec leurs fréquences connues.
 - **Images** (fax, SSTV, Hellschreiber) affichées en direct et enregistrées en PNG.
@@ -91,9 +92,14 @@ décode, en **blanc** ceux qu'il reconnaît seulement. Le **+** à côté d'une 
 
 ### Identification automatique
 
-Choisissez **Identifier**, puis cliquez sur un signal inconnu. Orsat-Decoder affiche ses mesures et
-les candidats les plus proches, essaie les décodeurs possibles et ouvre le bon canal dès qu'un texte
-lisible sort.
+Cliquez sur **IDENTIFIER UN SIGNAL SUR LE WATERFALL**, puis sur un signal inconnu. Orsat-Decoder affiche
+ses mesures et les candidats les plus proches, essaie les décodeurs possibles et ouvre le bon canal dès
+qu'un texte lisible sort.
+
+Le bouton **Comparer** d'un candidat ouvre votre signal et la référence côte à côte : les deux waterfalls à
+la même échelle, l'image d'origine, les deux sons et la fiche du signal. « C'est ce signal » ouvre le
+décodeur ; vos choix sont notés dans `~/Orsat-Decoder/confirmations.jsonl`. La bibliothèque vient de la base
+Artemis (AresValley) et du Signal Identification Wiki ; elle est installée avec Orsat-Decoder et lue sans Internet.
 
 ### Ligne de commande
 

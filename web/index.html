@@ -152,6 +152,47 @@
   </form>
 </dialog>
 
+<dialog id="cmpDialog" class="sheet cmp">
+  <div class="cmp-wrap">
+    <header class="cmp-head">
+      <h2>Comparer avec la bibliothèque</h2>
+      <div class="cmp-nav">
+        <button type="button" id="cmpPrev" class="zbtn" title="Candidat précédent">◀</button>
+        <span id="cmpPos"></span>
+        <button type="button" id="cmpNext" class="zbtn" title="Candidat suivant">▶</button>
+      </div>
+      <button type="button" class="icon-btn" id="cmpClose" aria-label="Fermer">✕</button>
+    </header>
+    <div class="cmp-grid">
+      <section class="cmp-side" id="cmpMine">
+        <h3>Votre signal</h3>
+        <div class="cmp-view"><canvas id="cmpMineCv"></canvas><p class="cmp-msg" id="cmpMineMsg"></p></div>
+        <div class="cmp-audio"><audio id="cmpMineAu" controls preload="auto"></audio>
+          <button type="button" id="cmpLive" class="btn" title="Écouter le signal en direct">Écouter en direct</button></div>
+        <p class="cmp-meas" id="cmpMeas"></p>
+      </section>
+      <section class="cmp-side" id="cmpRef">
+        <h3 id="cmpRefTitle">Référence</h3>
+        <div class="cmp-tabs" role="tablist">
+          <button type="button" class="cmp-tab on" data-tab="calc" role="tab" title="Waterfall recalculé à partir du son de référence, à la même échelle que votre signal">Même échelle</button>
+          <button type="button" class="cmp-tab" data-tab="img" role="tab" title="Image d'origine de la bibliothèque (échelle propre à chaque image)">Image d'origine</button>
+        </div>
+        <div class="cmp-view"><canvas id="cmpRefCv"></canvas><img id="cmpRefImg" alt="Spectre de référence" hidden><p class="cmp-msg" id="cmpRefMsg"></p></div>
+        <div class="cmp-audio"><audio id="cmpRefAu" controls loop preload="auto"></audio></div>
+        <p class="cmp-scale" id="cmpScale"></p>
+      </section>
+    </div>
+    <section class="cmp-card" id="cmpCard"></section>
+    <footer class="cmp-foot">
+      <span class="cmp-why" id="cmpWhy"></span>
+      <span class="spacer"></span>
+      <button type="button" id="cmpNo" class="btn">Ce n'est pas ça</button>
+      <button type="button" id="cmpYes" class="ident-btn cmp-yes">C'est ce signal</button>
+    </footer>
+    <p class="cmp-credit">Bibliothèque de signaux : Artemis (AresValley) · Signal Identification Wiki</p>
+  </div>
+</dialog>
+
 <div id="toasts"></div>
 <script src="vendor/leaflet/leaflet.js"></script>
 <script src="app.js"></script>

@@ -42,6 +42,7 @@ class Identifier(Decoder):
         self.prev = []               # candidats de la première analyse, repris pour l'écoute prolongée
         self.gen = 0                 # change à chaque réaccord : les résultats d'une analyse périmée sont jetés
         self.thread = None
+        self.capture = None          # dernier audio analysé (float, self.fs)
 
     def status(self):
         p = min(1.0, self.n / (self.fs * (self.long if self.state == "prolonge" else self.seconds)))
@@ -59,6 +60,7 @@ class Identifier(Decoder):
             self.state = "analyse"
             audio = np.concatenate(self.buf)
             self.buf = [audio]
+            self.capture = audio            # audio écouté : sert au panneau « Comparer » de l'interface
             self.thread = threading.Thread(target=self._run, args=(audio, self.af, self.gen, last), daemon=True)
             self.thread.start()
         with self.lock:

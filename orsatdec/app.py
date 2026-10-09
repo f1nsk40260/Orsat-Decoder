@@ -644,6 +644,48 @@ def make_web(app):
             html = html.replace(f'"{name}"', f'"{name}?v={stamp}"')
         return web.Response(text=html, content_type="text/html", headers={"Cache-Control": "no-cache"})
 
+    refs = DATA / "references"
+
+    async def ref_file(request):
+        """Pack de références (bibliothèque de signaux hors ligne), installé dans ~/Orsat-Decoder/references."""
+        rel = request.match_info["path"]
+        f = (refs / rel).resolve()
+        if refs.resolve() not in f.parents or not f.is_file():
+            if rel == "index.json":
+                return web.json_response({"version": None, "signals": []})
+            raise web.HTTPNotFound()
+        ctype = {".json": "application/json", ".webp": "image/webp", ".opus": "audio/ogg"}.get(f.suffix)
+        return web.FileResponse(f, headers={"Content-Type": ctype} if ctype else None)
+
+    async def capture_wav(request):
+        """Audio écouté par un canal d'identification, en WAV 16 bits : « votre signal » dans le panneau Comparer."""
+        ch = app.channels.get(request.match_info["ch"])
+        dec = ch.decoder if ch else None
+        x = getattr(dec, "capture", None)
+        if x is None or not len(x):
+            raise web.HTTPNotFound()
+        fs = int(dec.fs)
+        x = np.asarray(x[: fs * 30], np.float64)
+        peak = float(np.max(np.abs(x))) or 1.0
+        pcm = (x / peak * 0.9 * 32767).astype("<i2")
+        import io
+        buf = io.BytesIO()
+        with wave.open(buf, "wb") as w:
+            w.setnchannels(1)
+            w.setsampwidth(2)
+            w.setframerate(fs)
+            w.writeframes(pcm.tobytes())
+        return web.Response(body=buf.getvalue(), content_type="audio/wav", headers={"Cache-Control": "no-store"})
+
+    async def confirm(request):
+        """Choix de l'utilisateur dans le panneau Comparer : mesures + signal retenu ou écarté (apprentissage local)."""
+        m = await request.json()
+        rec = {"t": round(time.time()), "id": m.get("id"), "ok": bool(m.get("ok")), "measure": m.get("measure"),
+               "rf": m.get("rf")}
+        with open(DATA / "confirmations.jsonl", "a", encoding="utf-8") as f:
+            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+        return web.json_response({"ok": True})
+
     async def no_cache(request, response):
         if not request.path.startswith("/vendor/"):
             response.headers.setdefault("Cache-Control", "no-cache")
@@ -667,6 +709,9 @@ def make_web(app):
 
     w.router.add_get("/", index)
     w.router.add_get("/ws", ws_handler)
+    w.router.add_get("/ref/{path:.+}", ref_file)
+    w.router.add_get("/capture/{ch}.wav", capture_wav)
+    w.router.add_post("/confirm", confirm)
     w.router.add_static("/", WEB, show_index=False)
     w.on_response_prepare.append(no_cache)
     return w

@@ -24,7 +24,7 @@ fail() { echo; echo "${red}${bold}Échec :${off} $*"; exit 1; }
 echo "${bold}Orsat-Decoder${off} — installation"
 
 # -------------------------------------------------------------------------------------
-step "1/5  Paquets système (Python, compilateur C)"
+step "1/6  Paquets système (Python, compilateur C)"
 need=()
 command -v python3 >/dev/null || need+=(python3)
 python3 -c "import venv, ensurepip" 2>/dev/null || need+=(python3-venv)
@@ -46,7 +46,7 @@ import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)
 PY
 
 # -------------------------------------------------------------------------------------
-step "2/5  Copie du logiciel dans $APPDIR"
+step "2/6  Copie du logiciel dans $APPDIR"
 mkdir -p "$APPDIR"
 if [ "$(cd "$APPDIR" && pwd -P)" != "$(cd "$HERE" && pwd -P)" ]; then
   for d in orsatdec web native tests; do
@@ -72,12 +72,12 @@ fi
 info "Installé dans $APPDIR"
 
 # -------------------------------------------------------------------------------------
-step "3/5  Décodeurs natifs"
+step "3/6  Décodeurs natifs"
 "$APPDIR/native/build.sh" >"$APPDIR/build.log" 2>&1 || { tail -20 "$APPDIR/build.log"; fail "compilation des décodeurs natifs."; }
 info "$(tail -1 "$APPDIR/build.log")"
 
 # -------------------------------------------------------------------------------------
-step "4/5  Environnement Python (numpy, scipy, aiohttp…)"
+step "4/6  Environnement Python (numpy, scipy, aiohttp…)"
 if [ ! -x "$APPDIR/venv/bin/python" ]; then
   python3 -m venv "$APPDIR/venv" || fail "création de l'environnement Python (paquet python3-venv manquant ?)."
 fi
@@ -88,7 +88,43 @@ command -v parec >/dev/null || command -v pw-record >/dev/null || \
   info "${dim}Note : ni parec ni pw-record trouvés ; la source « Entrée audio » demande pulseaudio-utils ou pipewire-bin.${off}"
 
 # -------------------------------------------------------------------------------------
-step "5/5  Lanceur, menu et autotest"
+step "5/6  Bibliothèque de signaux (images et sons de référence, hors ligne)"
+# Installée une seule fois, puis seulement quand sa version change ; Orsat-Decoder la lit sans Internet.
+REFDIR="$APPDIR/references"
+REFURL="https://github.com/f1nsk40260/Orsat-Decoder/releases/download/bibliotheque"
+have="$(cat "$REFDIR/VERSION" 2>/dev/null || true)"
+pack=""
+if [ -n "${ORSAT_REFPACK:-}" ] && [ -f "$ORSAT_REFPACK" ]; then pack="$ORSAT_REFPACK"
+elif [ -f "$HERE/orsat-references.tar" ]; then pack="$HERE/orsat-references.tar"
+fi
+if [ -z "$pack" ]; then
+  want="$(curl -fsSL "$REFURL/references.version" 2>/dev/null || wget -qO- "$REFURL/references.version" 2>/dev/null || true)"
+  want="$(echo "$want" | head -1 | tr -cd '0-9.')"
+  if [ -z "$want" ]; then
+    if [ -n "$have" ]; then info "Version $have en place."; else info "${dim}Pas encore disponible au téléchargement : le panneau « Comparer » fonctionnera sans référence.${off}"; fi
+  elif [ "$want" = "$have" ]; then
+    info "Version $have déjà installée."
+  else
+    info "Téléchargement de la version $want (environ 85 Mo, une seule fois)…"
+    pack="$(mktemp --suffix=.tar)"
+    if ! { curl -fL --progress-bar "$REFURL/orsat-references.tar" -o "$pack" 2>/dev/null || wget -q --show-progress -O "$pack" "$REFURL/orsat-references.tar"; }; then
+      rm -f "$pack"; pack=""; info "${dim}Téléchargement impossible ; nouvel essai à la prochaine mise à jour.${off}"
+    fi
+  fi
+fi
+if [ -n "$pack" ]; then
+  rm -rf "$REFDIR.new" && mkdir -p "$REFDIR.new"
+  if tar xf "$pack" -C "$REFDIR.new" && [ -f "$REFDIR.new/index.json" ]; then
+    rm -rf "$REFDIR" && mv "$REFDIR.new" "$REFDIR"
+    info "Bibliothèque installée : version $(cat "$REFDIR/VERSION"), $(find "$REFDIR" -name signal.json | wc -l) signaux."
+  else
+    rm -rf "$REFDIR.new"; info "${dim}Pack de références illisible : ignoré.${off}"
+  fi
+  case "$pack" in /tmp/*) rm -f "$pack" ;; esac
+fi
+
+# -------------------------------------------------------------------------------------
+step "6/6  Lanceur, menu et autotest"
 mkdir -p "$BINDIR" "$DESKDIR" "$ICONDIR"
 cat > "$BINDIR/orsat-decoder" <<EOF
 #!/usr/bin/env bash
