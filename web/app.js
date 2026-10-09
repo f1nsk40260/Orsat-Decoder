@@ -1240,6 +1240,9 @@ function initWaterfall() {
 function setArmed(on) {
   S.armed = on;
   const b = $('#identBtn');
+  $('#identLbl').textContent = on ? 'CLIQUEZ SUR LE SIGNAL À IDENTIFIER' : 'IDENTIFIER UN SIGNAL SUR LE WATERFALL';
+  b.title = on ? 'Cliquez sur le signal dans le waterfall (Échap ou nouveau clic ici pour annuler)'
+               : 'Identifier un signal inconnu : cliquez ici, puis sur le signal dans le waterfall';
   b.classList.toggle('on', on); b.setAttribute('aria-pressed', on);
   $('#wfWrap').classList.toggle('armed', on);
   renderModes();
@@ -1290,7 +1293,6 @@ function wire() {
   $('#identBtn').onclick = () => {
     if (!S.armed && S.chans.size >= MAX_CH) { toast(`${MAX_CH} canaux au maximum : fermez-en un pour identifier un signal.`, 'error'); return; }
     setArmed(!S.armed);
-    if (S.armed) toast('Cliquez sur le signal à identifier dans le waterfall.');
   };
   addEventListener('keydown', e => { if (e.key === 'Escape' && S.armed) setArmed(false); });
   $('#setPalette').onchange = e => { S.ui.palette = e.target.value; buildLut(); savePrefs(); };
