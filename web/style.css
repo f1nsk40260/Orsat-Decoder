@@ -167,9 +167,21 @@ input[type=search]::placeholder { color: var(--muted); }
   height: 300px; overflow: hidden; border-top: 3px solid var(--c, var(--gold)); }
 .chan header { display: flex; align-items: center; gap: 10px; padding: 8px 10px 6px; flex-wrap: wrap; }
 .chan .mname { font-weight: 700; color: var(--c, var(--gold)); }
-.chan .freq { font-variant-numeric: tabular-nums; background: none; border: 1px solid transparent; border-radius: 5px; padding: 1px 6px; width: 120px; }
-.chan .freq:hover, .chan .freq:focus { border-color: var(--line); background: var(--night); }
-.chan .unit { color: var(--muted); font-size: 12px; margin-left: -8px; }
+/* cadran de fréquence : cadre, icône molette et flèches pour montrer qu'il s'accorde */
+.chan .fdial { display: inline-flex; align-items: stretch; border: 1px solid #39FF1455; border-radius: 6px; background: #050807;
+  box-shadow: inset 0 2px 6px #000; cursor: ns-resize; transition: border-color .15s, box-shadow .15s; }
+.chan .fdial:hover, .chan .fdial:focus-within { border-color: var(--fluo); box-shadow: inset 0 2px 6px #000, 0 0 8px #39FF1455; }
+.chan .fwheel { display: flex; align-items: center; padding: 0 2px 0 6px; }
+.chan .fwheel svg { width: 11px; height: 15px; fill: none; stroke: #39FF14aa; stroke-width: 1.6; stroke-linecap: round; }
+.chan .fdial:hover .fwheel svg { stroke: var(--fluo); }
+.chan .freq { font: 700 16px/1.2 var(--mono); font-variant-numeric: tabular-nums; color: var(--fluo); text-shadow: 0 0 6px #39FF1466;
+  background: none; border: 0; padding: 2px 4px; width: 104px; text-align: right; cursor: ns-resize; }
+.chan .freq:focus { cursor: text; outline: none; }
+.chan .fsteps { display: flex; flex-direction: column; border-left: 1px solid #39FF1433; }
+.chan .fstep { flex: 1; background: none; border: 0; padding: 0 6px; font-size: 8px; line-height: 1; color: #39FF14aa; }
+.chan .fstep:hover { color: #10161d; background: var(--fluo); }
+.chan .fstep:first-child { border-radius: 0 5px 0 0; } .chan .fstep:last-child { border-radius: 0 0 5px 0; }
+.chan .unit { color: var(--muted); font-size: 12px; margin-left: -6px; }
 .chan .state { font-size: 12px; color: var(--muted); }
 .chan .meters { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; margin-left: auto; white-space: nowrap; }
 .chan .meters b { color: var(--text); font-weight: 400; }
@@ -374,3 +386,6 @@ dialog .hint.bad { color: var(--bad); }
 .icon-btn.rec.on { color: #fff; background: #C0392B; }
 
 @media (max-width: 900px) { .chan { height: 360px; } }
+/* modes qui décodent toute la bande audio (FT8, WSPR…) : pas d'accord à la molette */
+.chan .fdial.fixed { cursor: default; } .chan .fdial.fixed .fwheel, .chan .fdial.fixed .fsteps { display: none; }
+.chan .fdial.fixed .freq { cursor: text; }
