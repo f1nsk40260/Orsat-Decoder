@@ -239,12 +239,26 @@ function renderModes() {
     ? `Mode choisi : ${m.label}. Cliquez sur un signal dans le waterfall audio : tous les canaux partagent l'audio de la source.`
     : `Mode choisi : ${m.label}. Cliquez sur un signal dans le waterfall pour ouvrir un canal.`;
 }
-// ------------------------------------------------------------------ signets
+// ------------------------------------------------------------------ mémoires
+// classement par utilisation : d'après le mode, le nom de la mémoire et les catégories de la bibliothèque
+const USAGES = ['Amateur', 'Aviation', 'Marine', 'Météo', 'Signaux horaires', 'Navigation', 'Utilitaire et militaire', 'Autres'];
+function usageOf(mode, label = '', cats = []) {
+  const m = S.byId[mode] || {}, t = norm(label);
+  if (mode === 'wefax' || /meteo|weather|\bdwd\b/.test(t)) return 'Météo';
+  if (m.family === 'Signaux horaires') return 'Signaux horaires';
+  if (['hfdl', 'acars', 'selcal'].includes(mode) || m.family === 'Aviation' || cats.includes('Aviation')) return 'Aviation';
+  if (/selcall/.test(t)) return 'Utilitaire et militaire';
+  if (['navtex', 'dsc', 'dsc_vhf', 'sitora'].includes(mode) || m.family === 'Maritime' || cats.includes('Marine')) return 'Marine';
+  if (mode === 'dgps' || cats.includes('Navigation')) return 'Navigation';
+  if (mode === 'ale' || (cats.includes('Military') && !cats.includes('Amateur Radio'))) return 'Utilitaire et militaire';
+  if (!cats.length || cats.includes('Amateur Radio')) return 'Amateur';
+  return 'Autres';
+}
 function bmSave(list) { S.bookmarks = list; send({ t: 'bookmarks', list }); renderPresets(); renderRibbon(); }
 function bmEdit(idx, init) {
   const dlg = $('#bmDialog'), isNew = idx == null;
   const b = isNew ? { label: '', mode: S.mode || 'psk31', freq: 0, ribbon: true, ...(init || {}) } : S.bookmarks[idx];
-  $('#bmTitle').textContent = isNew ? 'Nouveau signet' : 'Modifier le signet';
+  $('#bmTitle').textContent = isNew ? 'Nouvelle mémoire' : 'Modifier la mémoire';
   $('#bmLabel').value = b.label || '';
   $('#bmFreq').value = b.freq ? fmtKHz(b.freq).replace(/\s/g, '') : '';
   const sel = $('#bmMode'); sel.replaceChildren();
@@ -275,69 +289,79 @@ function bmEdit(idx, init) {
 }
 function renderPresets() {
   const menu = $('#presetMenu'); menu.replaceChildren();
-  const q = el('input', { type: 'search', class: 'dir-search', placeholder: 'Chercher un signet, un signal, un mode ou une fréquence (kHz)…',
+  const q = el('input', { type: 'search', class: 'dir-search', placeholder: 'Chercher une mémoire, un mode ou une fréquence (kHz)…',
     autocomplete: 'off', spellcheck: 'false' });
   const active = S.chans.get(S.active);
   const tools = el('div', { class: 'dir-tools' },
-    el('button', { type: 'button', class: 'btn', text: '+ Nouveau signet', onclick: e => { e.stopPropagation(); bmEdit(null); } }),
-    el('button', { type: 'button', class: 'btn', text: '+ Canal actif', title: 'Mettre en signet la fréquence et le mode du canal actif',
+    el('button', { type: 'button', class: 'btn', text: '+ Nouvelle mémoire', onclick: e => { e.stopPropagation(); bmEdit(null); } }),
+    el('button', { type: 'button', class: 'btn', text: '+ Canal actif', title: 'Mettre en mémoire la fréquence et le mode du canal actif',
       disabled: active ? null : 'disabled',
       onclick: e => { e.stopPropagation(); const c = S.chans.get(S.active); if (c) bmEdit(null, { mode: c.mode, freq: c.freq,
         label: `${S.byId[c.mode]?.label || c.mode} ${fmtKHz(c.freq)}` }); } }),
     el('span', { class: 'spacer' }),
-    el('button', { type: 'button', class: 'btn', text: 'Signets par défaut', title: 'Remplacer vos signets par la liste d\'origine',
-      onclick: e => { e.stopPropagation(); if (confirm('Remplacer tous vos signets par la liste d\'origine ?')) send({ t: 'bookmarks_reset' }); } }));
+    el('button', { type: 'button', class: 'btn', text: 'Mémoires par défaut', title: 'Remplacer vos mémoires par la liste d\'origine',
+      onclick: e => { e.stopPropagation(); if (confirm('Remplacer toutes vos mémoires par la liste d\'origine ?')) send({ t: 'bookmarks_reset' }); } }));
   const legend = el('div', { class: 'dir-legend' },
-    el('span', { class: 'dec', text: 'décodable' }), el('span', { class: 'nodec', text: 'identifiable seulement (ouvre « Identifier »)' }),
-    el('span', { class: 'flag', text: '⚑ affiché sous l\'échelle du waterfall' }));
+    el('span', { class: 'dec', text: 'décodable par Orsat-Decoder' }),
+    el('span', { class: 'flag', text: '⚑ affichée sous l\'échelle du waterfall' }),
+    el('span', { class: 'lib', text: '+ ajouter un signal de la bibliothèque à vos mémoires' }));
   const body = el('div', { class: 'dir-body' });
   menu.append(el('div', { class: 'dir-head' }, q, tools, legend), body);
-  const freqBtn = (f, dec, onclick, title) => el('button', { type: 'button', class: 'fchip ' + (dec ? 'dec' : 'nodec'), title,
+  const freqBtn = (f, onclick, title) => el('button', { type: 'button', class: 'fchip dec', title,
     onclick: e => { e.stopPropagation(); menu.hidden = true; onclick(); } }, fmtKHz(f));
-  const sections = [];
-  // 1. les signets de l'utilisateur
-  const mine = el('div', { class: 'dir-sec' }, el('div', { class: 'grp', text: `Mes signets (${S.bookmarks.length})` }));
-  const order = S.bookmarks.map((bm, i) => [bm, i]).sort((x, y) =>
-    (S.byId[x[0].mode]?.label || '').localeCompare(S.byId[y[0].mode]?.label || '') || x[0].freq - y[0].freq);
-  for (const [bm, i] of order) {
-    const ml = S.byId[bm.mode]?.label || bm.mode, dec = S.byId[bm.mode]?.kind !== 'ident';
-    const flag = el('button', { type: 'button', class: 'bm-flag' + (bm.ribbon !== false ? ' on' : ''),
-      title: bm.ribbon !== false ? 'Affiché sous l\'échelle : cliquer pour le retirer' : 'Afficher sous l\'échelle du waterfall', text: '⚑',
-      onclick: e => { e.stopPropagation(); const l = [...S.bookmarks]; l[i] = { ...bm, ribbon: bm.ribbon === false }; bmSave(l); } });
-    const edit = el('button', { type: 'button', class: 'bm-act', title: 'Modifier', text: '✎', onclick: e => { e.stopPropagation(); bmEdit(i); } });
-    const del = el('button', { type: 'button', class: 'bm-act', title: 'Supprimer', text: '✕',
-      onclick: e => { e.stopPropagation(); bmSave(S.bookmarks.filter((_, j) => j !== i)); } });
-    const row = el('div', { class: 'dir-row bm-row' },
-      el('span', { class: 'dir-title' }, el('span', { class: 'dir-name ' + (dec ? 'dec' : 'nodec'), text: bm.label }),
-        el('span', { class: 'dir-mode', text: ml })),
-      el('span', { class: 'dir-freqs' }, freqBtn(bm.freq, dec, () => usePreset(bm), `Ouvrir ${ml} sur ${fmtKHz(bm.freq)} kHz`),
-        el('span', { class: 'spacer' }), flag, edit, del));
-    row.dataset.key = (bm.label + ' ' + ml + ' ' + bm.freq / 1000).toLowerCase();
-    mine.append(row);
-  }
-  sections.push(mine);
-  // 2. tous les signaux identifiables de la base (on peut en faire des signets)
-  const all = el('div', { class: 'dir-sec' }, el('div', { class: 'grp', text: `Signaux identifiables (${(S.catalog.directory || []).length})` }));
+  const groups = new Map(USAGES.map(u => [u, { mine: [], lib: [] }]));
+  // 1. les mémoires de l'utilisateur (seulement celles qu'Orsat-Decoder décode)
+  S.bookmarks.forEach((bm, i) => {
+    if (!S.byId[bm.mode] || S.byId[bm.mode].kind === 'ident') return;
+    groups.get(usageOf(bm.mode, bm.label))?.mine.push([bm, i]);
+  });
+  // 2. les signaux décodables de la bibliothèque, pas encore en mémoire
+  const have = new Set(S.bookmarks.map(b => `${b.mode}@${Math.round(b.freq)}`));
   for (const d of S.catalog.directory || []) {
-    const dec = !!d.mode;
-    const mode = dec ? d.mode : 'ident';
-    const ml = dec ? (S.byId[d.mode]?.label || d.mode) : '';
-    const name = el('span', { class: 'dir-name ' + (dec ? 'dec' : 'nodec'), text: d.title });
-    const freqs = el('span', { class: 'dir-freqs' });
-    for (const f of d.freqs) {
-      freqs.append(el('span', { class: 'fpair' },
-        freqBtn(f, dec, () => usePreset({ mode, freq: f }), dec ? `Ouvrir ${ml} sur ${fmtKHz(f)} kHz` : `Identifier le signal sur ${fmtKHz(f)} kHz`),
-        el('button', { type: 'button', class: 'fadd', title: 'Ajouter aux signets', text: '+',
-          onclick: e => { e.stopPropagation(); bmEdit(null, { mode, freq: f, label: d.title.slice(0, 60) }); } })));
-    }
-    if (d.range) freqs.append(el('span', { class: 'frange', text: `${fmtKHz(d.range[0])} à ${fmtKHz(d.range[1])} kHz` }));
-    if (!d.freqs.length && !d.range) freqs.append(el('span', { class: 'frange', text: 'fréquence non précisée' }));
-    const row = el('div', { class: 'dir-row' }, el('span', { class: 'dir-title' }, name,
-      dec ? el('span', { class: 'dir-mode', text: ml }) : null), freqs);
-    row.dataset.key = (d.title + ' ' + ml + ' ' + d.freqs.map(f => f / 1000).join(' ')).toLowerCase();
-    all.append(row);
+    if (!d.mode || !S.byId[d.mode]) continue;
+    groups.get(usageOf(d.mode, d.title, d.cat))?.lib.push({ ...d, freqs: d.freqs.filter(f => !have.has(`${d.mode}@${Math.round(f)}`)) });
   }
-  sections.push(all);
+  const sections = [];
+  for (const [usage, g] of groups) {
+    const libN = g.lib.filter(d => d.freqs.length || d.range).length;
+    if (!g.mine.length && !libN) continue;
+    const sec = el('div', { class: 'dir-sec' }, el('div', { class: 'grp', text: usage },
+      el('span', { class: 'grp-n', text: ` ${g.mine.length} en mémoire${libN ? ` · ${libN} dans la bibliothèque` : ''}` })));
+    g.mine.sort((x, y) => (S.byId[x[0].mode]?.label || '').localeCompare(S.byId[y[0].mode]?.label || '') || x[0].freq - y[0].freq);
+    for (const [bm, i] of g.mine) {
+      const ml = S.byId[bm.mode]?.label || bm.mode;
+      const flag = el('button', { type: 'button', class: 'bm-flag' + (bm.ribbon !== false ? ' on' : ''),
+        title: bm.ribbon !== false ? 'Affichée sous l\'échelle : cliquer pour la retirer' : 'Afficher sous l\'échelle du waterfall', text: '⚑',
+        onclick: e => { e.stopPropagation(); const l = [...S.bookmarks]; l[i] = { ...bm, ribbon: bm.ribbon === false }; bmSave(l); } });
+      const edit = el('button', { type: 'button', class: 'bm-act', title: 'Modifier', text: '✎', onclick: e => { e.stopPropagation(); bmEdit(i); } });
+      const del = el('button', { type: 'button', class: 'bm-act', title: 'Supprimer', text: '✕',
+        onclick: e => { e.stopPropagation(); bmSave(S.bookmarks.filter((_, j) => j !== i)); } });
+      const row = el('div', { class: 'dir-row bm-row' },
+        el('span', { class: 'dir-title' }, el('span', { class: 'dir-name dec', text: bm.label }), el('span', { class: 'dir-mode', text: ml })),
+        el('span', { class: 'dir-freqs' }, freqBtn(bm.freq, () => usePreset(bm), `Ouvrir ${ml} sur ${fmtKHz(bm.freq)} kHz`),
+          el('span', { class: 'spacer' }), flag, edit, del));
+      row.dataset.key = (usage + ' ' + bm.label + ' ' + ml + ' ' + bm.freq / 1000).toLowerCase();
+      sec.append(row);
+    }
+    const lib = g.lib.filter(d => d.freqs.length || d.range);
+    if (lib.length) {
+      sec.append(el('div', { class: 'sub-grp', text: 'À ajouter depuis la bibliothèque' }));
+      for (const d of lib) {
+        const ml = S.byId[d.mode]?.label || d.mode;
+        const freqs = el('span', { class: 'dir-freqs' });
+        for (const f of d.freqs) freqs.append(el('span', { class: 'fpair' },
+          freqBtn(f, () => usePreset({ mode: d.mode, freq: f }), `Ouvrir ${ml} sur ${fmtKHz(f)} kHz`),
+          el('button', { type: 'button', class: 'fadd', title: 'Ajouter à mes mémoires', text: '+',
+            onclick: e => { e.stopPropagation(); bmEdit(null, { mode: d.mode, freq: f, label: d.title.slice(0, 60) }); } })));
+        if (d.range) freqs.append(el('span', { class: 'frange', text: `${fmtKHz(d.range[0])} à ${fmtKHz(d.range[1])} kHz` }));
+        const row = el('div', { class: 'dir-row lib-row' }, el('span', { class: 'dir-title' },
+          el('span', { class: 'dir-name dec', text: d.title }), el('span', { class: 'dir-mode', text: ml })), freqs);
+        row.dataset.key = (usage + ' ' + d.title + ' ' + ml + ' ' + d.freqs.map(f => f / 1000).join(' ')).toLowerCase();
+        sec.append(row);
+      }
+    }
+    sections.push(sec);
+  }
   body.append(...sections);
   q.addEventListener('click', e => e.stopPropagation());
   q.addEventListener('input', () => {
@@ -1267,7 +1291,7 @@ function wfResize() {
   const r = WF.c.getBoundingClientRect(); WF.dpr = devicePixelRatio || 1;
   const w = Math.max(100, Math.round(r.width * WF.dpr)), h = Math.max(100, Math.round(r.height * WF.dpr));
   if (w === WF.w && h === WF.h) return;
-  WF.w = WF.c.width = w; WF.h = WF.c.height = h; WF.scaleH = Math.round(24 * WF.dpr);
+  WF.w = WF.c.width = w; WF.h = WF.c.height = h; WF.scaleH = Math.round(28 * WF.dpr);
   WF.ctx.fillStyle = '#0D151D'; WF.ctx.fillRect(0, 0, w, h);
   drawScale(); placeMarkers();
 }
@@ -1284,12 +1308,14 @@ function drawScale() {
   if (!S.view || !WF.w) return;
   const { ctx, w, scaleH, dpr } = WF, [f0, f1] = S.view;
   ctx.fillStyle = '#141E28'; ctx.fillRect(0, 0, w, scaleH);
-  const step = niceStep(f1 - f0, w / dpr);
-  ctx.font = `${11 * dpr}px Ubuntu, Cantarell, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const step = niceStep(f1 - f0, w / dpr * 0.8);     // libellés plus gros : un peu plus espacés
+  ctx.font = `700 ${13.5 * dpr}px "Ubuntu Mono", "DejaVu Sans Mono", monospace`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   for (let f = Math.ceil(f0 / step) * step; f <= f1; f += step) {
     const x = Math.round((f - f0) / (f1 - f0) * w) + .5;
-    ctx.strokeStyle = '#5E7487'; ctx.beginPath(); ctx.moveTo(x, scaleH); ctx.lineTo(x, scaleH - 6 * dpr); ctx.stroke();
-    ctx.fillStyle = '#8394A5'; ctx.fillText(audioOnly() ? String(Math.round(f)) : fmtKHz(f), x, scaleH / 2 - 2 * dpr);
+    ctx.strokeStyle = '#39FF14aa'; ctx.lineWidth = dpr; ctx.beginPath(); ctx.moveTo(x, scaleH); ctx.lineTo(x, scaleH - 6 * dpr); ctx.stroke();
+    ctx.shadowColor = '#39FF1466'; ctx.shadowBlur = 4 * dpr;
+    ctx.fillStyle = '#39FF14'; ctx.fillText(audioOnly() ? String(Math.round(f)) : fmtKHz(f), x, scaleH / 2 - 2 * dpr);
+    ctx.shadowBlur = 0;
   }
   ctx.strokeStyle = '#2C3C4C'; ctx.beginPath(); ctx.moveTo(0, scaleH - .5); ctx.lineTo(w, scaleH - .5); ctx.stroke();
 }

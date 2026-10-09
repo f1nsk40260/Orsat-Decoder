@@ -28,7 +28,7 @@ Désinstallation : `~/Orsat-Decoder/uninstall.sh`.
   reste dans la liste des sources pour les fois suivantes.
 - **Identification automatique** des signaux inconnus, confirmée par décodage.
 - **Comparaison avec la bibliothèque de signaux** (583 signaux de la base Artemis) : waterfall et son de référence à côté de votre signal, hors ligne.
-- **Signets** modifiables, affichés sous l'échelle du waterfall.
+- **Mémoires** modifiables, classées par utilisation (amateur, aviation, marine…), affichées sous l'échelle du waterfall.
 - **Annuaire** de 257 signaux identifiables avec leurs fréquences connues.
 - **Images** (fax, SSTV, Hellschreiber) affichées en direct et enregistrées en PNG.
 - **Carte HFDL** des avions et des stations au sol.
@@ -60,7 +60,7 @@ Désinstallation : `~/Orsat-Decoder/uninstall.sh`.
 1. Choisissez la source en haut à gauche, ou **＋ Ajouter un serveur…** : collez l'adresse de la page
    web du récepteur, donnez-lui un nom (et le mot de passe d'un Kiwi qui en demande un).
 2. Choisissez un mode, puis **cliquez sur un signal** dans le waterfall : un canal s'ouvre.
-3. Ou ouvrez un **signet** : avec TCI ou CAT, le récepteur est réaccordé.
+3. Ou ouvrez une **mémoire** : avec TCI ou CAT, le récepteur est réaccordé.
 
 **Waterfall** : molette = accord du canal actif (Maj 1 Hz, Alt 100 Hz), Ctrl+molette = zoom,
 glisser = se déplacer, glisser un marqueur = réaccorder ce canal.
@@ -79,16 +79,17 @@ pause, effacement, enregistrement du texte, écoute de l'audio du décodeur.
 Les WebSDR de websdr.org utilisent un format audio fermé : pour eux, écoutez dans le navigateur et
 choisissez la source **Entrée audio** sur le « Monitor » de la carte son.
 
-### Signets
+### Mémoires
 
-![Signets et annuaire des signaux](docs/images/annuaire.jpg)
+![Mémoires](docs/images/annuaire.jpg)
 
-- **+ Nouveau signet** ou **+ Canal actif** pour en ajouter ; **✎** modifier, **✕** supprimer.
-- **⚑** affiche le signet sous l'échelle du waterfall : un clic ouvre le canal.
-- **Signets par défaut** remet la liste d'origine.
+- **+ Nouvelle mémoire** ou **+ Canal actif** pour en ajouter ; **✎** modifier, **✕** supprimer.
+- **⚑** affiche la mémoire sous l'échelle du waterfall : un clic ouvre le canal.
+- **Mémoires par défaut** remet la liste d'origine.
 
-Sous les signets, l'annuaire liste les signaux identifiables : en **vert fluo** ceux qu'Orsat-Decoder
-décode, en **blanc** ceux qu'il reconnaît seulement. Le **+** à côté d'une fréquence en fait un signet.
+Le menu **MÉMOIRES** ne montre que des signaux qu'Orsat-Decoder décode, classés par utilisation (Amateur,
+Aviation, Marine, Météo, Signaux horaires…). Sous vos mémoires, chaque rubrique propose aussi les signaux
+décodables de la bibliothèque : le **+** à côté d'une fréquence l'ajoute à vos mémoires.
 
 ### Identification automatique
 

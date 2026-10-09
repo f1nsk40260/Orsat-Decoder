@@ -353,7 +353,7 @@ def directory():
             rng, fr = [fr[0], fr[-1]], fr[1:-1]            # bornes rondes (3 et 30 MHz…) autour de vrais canaux
         dec = DECODABLE.get(r["id"])
         mode = dec[0][0] if dec and dec[0][0] in BY_ID else None
-        out.append({"id": r["id"], "title": r["title"], "mode": mode, "freqs": fr, "range": rng})
+        out.append({"id": r["id"], "title": r["title"], "mode": mode, "freqs": fr, "range": rng, "cat": r.get("cat", [])})
     out.sort(key=lambda e: e["title"].lower())
     return out
 

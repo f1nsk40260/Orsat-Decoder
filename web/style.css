@@ -150,12 +150,12 @@ input[type=search]::placeholder { color: var(--muted); }
 #wfWrap { position: relative; background: #0D151D; border-bottom: 1px solid var(--line); overflow: hidden; cursor: crosshair; user-select: none; }
 #wf { width: 100%; height: 100%; display: block; }
 #markers { position: absolute; inset: 0; pointer-events: none; }
-.marker { position: absolute; top: 24px; bottom: 0; pointer-events: auto; cursor: ew-resize; }
+.marker { position: absolute; top: 28px; bottom: 0; pointer-events: auto; cursor: ew-resize; }
 .marker .band { position: absolute; inset: 0; opacity: .16; }
 .marker .edge { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1px dashed; opacity: .7; }
 .marker .tag { position: absolute; top: 24px; left: 50%; transform: translateX(-50%); white-space: nowrap; font-size: 11.5px;
   padding: 1px 7px; border-radius: 4px; color: #10161d; font-weight: 700; }
-.wf-hover { position: absolute; top: 28px; padding: 2px 7px; border-radius: 4px; pointer-events: none; background: #000b;
+.wf-hover { position: absolute; top: 32px; padding: 2px 7px; border-radius: 4px; pointer-events: none; background: #000b;
   font-size: 12px; font-variant-numeric: tabular-nums; display: none; transform: translateX(-50%); white-space: nowrap; }
 #cmdBar .zoom { gap: 6px; }
 .zbtn { min-width: 32px; height: 28px; padding: 0 8px; border-radius: 6px; font-weight: 700; color: #F2D78A; text-transform: none; letter-spacing: 0;
@@ -364,7 +364,7 @@ dialog code { color: var(--text); }
 #bmDialog input:not([type=checkbox]), #bmDialog select { background: var(--night); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; width: 100%; }
 #bmDialog input[type=checkbox] { justify-self: start; accent-color: var(--gold); width: 18px; height: 18px; }
 #bmDialog .row-btns { margin-top: 14px; }
-#bmRibbon { position: absolute; left: 0; right: 0; top: 24px; height: 20px; z-index: 3; pointer-events: none;
+#bmRibbon { position: absolute; left: 0; right: 0; top: 28px; height: 20px; z-index: 3; pointer-events: none;
   background: linear-gradient(#141E28e6, #141E2899); }
 #bmRibbon .rb { position: absolute; top: 2px; height: 16px; padding: 0 5px 0 7px; border: 0; border-left: 2px solid var(--gold);
   background: #C9A24A26; color: #E8D29A; font-size: 11px; line-height: 16px; white-space: nowrap; pointer-events: auto;
@@ -451,3 +451,11 @@ dialog.cmp { width: min(1180px, 96vw); max-height: 94vh; overflow-y: auto; }
 .cmp-credit { margin: 0; text-align: right; font-size: 11px; color: #6E8193; }
 .cmp-btn { color: var(--gold); }
 @media (max-width: 900px) { .cmp-grid { grid-template-columns: 1fr; } }
+
+/* ---------- mémoires classées par utilisation ---------- */
+#presetBtn { font-weight: 700; letter-spacing: .1em; }
+.dir-sec .grp { color: var(--gold); font-weight: 700; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; }
+.sub-grp { color: var(--muted); font-size: 11.5px; margin: 8px 4px 2px; text-transform: uppercase; letter-spacing: .06em; }
+.lib-row .dir-name { opacity: .85; font-weight: 400; }
+.dir-legend .lib { color: var(--muted); }
+.dir-sec .grp .grp-n { color: var(--muted); font-weight: 400; text-transform: none; letter-spacing: 0; font-size: 12px; }

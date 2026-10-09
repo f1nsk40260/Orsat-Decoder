@@ -38,7 +38,7 @@
     </div>
 
     <div class="menu-wrap">
-      <button id="presetBtn" class="btn" title="Signets : vos fréquences et les signaux identifiables">Signets</button>
+      <button id="presetBtn" class="btn" title="Mémoires : vos fréquences décodables, classées par utilisation">MÉMOIRES</button>
       <div id="presetMenu" class="menu" hidden></div>
     </div>
     <button id="settingsBtn" class="icon-btn" title="Réglages" aria-label="Réglages">
@@ -59,7 +59,7 @@
   <main id="main">
     <section id="wfWrap">
       <canvas id="wf"></canvas>
-      <div id="bmRibbon" aria-label="Signets"></div>
+      <div id="bmRibbon" aria-label="Mémoires"></div>
       <div id="markers"></div>
       <div id="wfHover" class="wf-hover"></div>
       <div id="wfOverlay" class="wf-overlay"><p>Connexion au serveur…</p></div>
@@ -86,7 +86,7 @@
       <div id="chans"></div>
       <div id="chanEmpty" class="empty-state">
         <p>Aucun canal ouvert.</p>
-        <p class="sub">Cliquez sur un signal dans le waterfall avec le mode choisi à gauche, ou utilisez « Signets ».</p>
+        <p class="sub">Cliquez sur un signal dans le waterfall avec le mode choisi à gauche, ou utilisez « Mémoires ».</p>
       </div>
     </section>
   </main>
@@ -115,7 +115,7 @@
 
 <dialog id="bmDialog" class="sheet">
   <form method="dialog" id="bmForm">
-    <header><h2 id="bmTitle">Signet</h2><button type="button" class="icon-btn bm-cancel" aria-label="Fermer">✕</button></header>
+    <header><h2 id="bmTitle">Mémoire</h2><button type="button" class="icon-btn bm-cancel" aria-label="Fermer">✕</button></header>
     <label class="row">Nom<input id="bmLabel" maxlength="60" required spellcheck="false"></label>
     <label class="row">Fréquence (kHz)<input id="bmFreq" inputmode="decimal" required spellcheck="false"></label>
     <label class="row">Mode<select id="bmMode"></select></label>
