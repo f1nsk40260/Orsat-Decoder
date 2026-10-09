@@ -396,3 +396,14 @@ dialog .hint.bad { color: var(--bad); }
 /* modes qui décodent toute la bande audio (FT8, WSPR…) : pas d'accord à la molette */
 .chan .fdial.fixed { cursor: default; } .chan .fdial.fixed .fwheel, .chan .fdial.fixed .fsteps { display: none; }
 .chan .fdial.fixed .freq { cursor: text; }
+
+/* pavé « Choisir un Mode » : flèche dorée qui invite à choisir dans la liste (on peut aussi taper pour filtrer) */
+.pick-mode { position: relative; display: block; }
+.pick-mode input[type=search] { padding-right: 34px; border-color: #5C4A24; font-weight: 700; }
+.pick-mode input[type=search]::placeholder { color: var(--gold); opacity: 1; }
+.pick-mode input[type=search]:focus { border-color: var(--gold); }
+.pick-mode input[type=search]::-webkit-search-cancel-button { display: none; }
+.pick-arrow { position: absolute; right: 10px; top: 50%; width: 16px; height: 16px; margin-top: -8px; pointer-events: none;
+  fill: none; stroke: var(--gold); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; animation: pickBob 1.6s ease-in-out infinite; }
+.pick-mode input:not(:placeholder-shown) ~ .pick-arrow { display: none; }
+@keyframes pickBob { 0%, 100% { transform: translateY(-2px); } 50% { transform: translateY(2px); } }

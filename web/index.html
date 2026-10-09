@@ -47,8 +47,10 @@
   </header>
 
   <aside id="modes">
-    <h2 class="modes-title">Modes Disponibles</h2>
-    <div class="search"><input id="modeSearch" type="search" placeholder="Chercher un mode…" autocomplete="off" spellcheck="false"></div>
+    <h2 class="modes-title">Décodeurs inclus</h2>
+    <div class="search"><label class="pick-mode" title="Choisissez un mode dans la liste ci-dessous, ou tapez son nom pour le trouver">
+      <input id="modeSearch" type="search" placeholder="Choisir un Mode" autocomplete="off" spellcheck="false" aria-label="Choisir un mode : tapez pour filtrer la liste">
+      <svg class="pick-arrow" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 5.5l5 5 5-5"/></svg></label></div>
     <nav id="modeList"></nav>
     <p class="hint" id="placeHint">Choisissez un mode, puis cliquez sur un signal dans le waterfall pour ouvrir un canal.</p>
     <p class="hint keys">Molette sur le waterfall : zoom. Ctrl+molette : accorde le canal actif (Maj : 1 Hz, Alt : 100 Hz). Molette sur le spectre d'un canal : accord.</p>
