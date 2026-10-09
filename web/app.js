@@ -349,9 +349,14 @@ function renderPresets() {
 // bande de signets sous l'échelle du waterfall : un clic ouvre le canal
 function renderRibbon() {
   const box = $('#bmRibbon'); if (!box) return;
+  const W = WF.c ? WF.c.getBoundingClientRect().width : 0;
+  // on ne reconstruit que si la vue ou les signets ont changé : sinon le bouton sous la souris
+  // disparaîtrait entre l'appui et le relâchement, et le clic serait perdu
+  const key = JSON.stringify([S.view, W, S.bookmarks]);
+  if (key === S.ribbonKey) return;
+  S.ribbonKey = key;
   box.replaceChildren();
   if (!S.view || !WF.c || !S.bookmarks) return;
-  const W = WF.c.getBoundingClientRect().width;
   const items = S.bookmarks.filter(b => b.ribbon !== false).map(b => ({ b, x: xOfFreq(b.freq) }))
     .filter(o => o.x >= -2 && o.x <= W + 2).sort((p, q) => p.x - q.x);
   let right = -1e9;
@@ -359,7 +364,7 @@ function renderRibbon() {
     const ml = S.byId[b.mode]?.label || b.mode;
     const flag = el('button', { type: 'button', class: 'rb', style: `left:${x}px`,
       title: `${b.label} — ${ml}, ${fmtKHz(b.freq)} kHz : cliquer pour ouvrir`,
-      onclick: e => { e.stopPropagation(); usePreset(b); } });
+      onmousedown: e => { if (e.button !== 0) return; e.stopPropagation(); e.preventDefault(); usePreset(b); } });
     const lbl = el('span', { text: b.label });
     flag.append(lbl);
     box.append(flag);
@@ -1162,7 +1167,7 @@ function initWaterfall() {
   const wrap = $('#wfWrap'), hover = $('#wfHover');
   let drag = null;
   wrap.addEventListener('mousedown', e => {
-    if (e.target.closest('.marker, .zoom, .wf-overlay')) return;
+    if (e.target.closest('.marker, .rb, .wf-overlay')) return;
     drag = { x: e.clientX, view: S.view && [...S.view], moved: false };
   });
   addEventListener('mousemove', e => {
@@ -1180,7 +1185,7 @@ function initWaterfall() {
     if (!drag) return;
     const d = drag; drag = null;
     if (d.moved) { setView(S.view[0], S.view[1]); return; }
-    if (!S.view || e.target.closest('.marker, .zoom, .wf-overlay') || !e.target.closest('#wfWrap')) return;
+    if (!S.view || e.target.closest('.marker, .rb, .wf-overlay') || !e.target.closest('#wfWrap')) return;
     const m = S.byId[S.armed ? 'ident' : S.mode]; if (!m) return;
     let f = freqAtX(e.clientX);
     const hzPerPx = (S.view[1] - S.view[0]) / WF.c.getBoundingClientRect().width;
@@ -1218,9 +1223,10 @@ function initWaterfall() {
   wrap.addEventListener('mouseleave', () => { hover.style.display = 'none'; });
   wrap.addEventListener('wheel', e => {
     e.preventDefault();
+    // molette : zoom autour du curseur ; Ctrl+molette : accorde le canal actif
     const c = S.chans.get(S.active);
-    if (e.ctrlKey || !c || S.byId[c.mode]?.whole) zoom(e.deltaY < 0 ? 0.7 : 1 / 0.7, freqAtX(e.clientX));
-    else wheelTune(c, e);
+    if (e.ctrlKey && c && !S.byId[c.mode]?.whole) wheelTune(c, e);
+    else zoom(e.deltaY < 0 ? 0.8 : 1 / 0.8, freqAtX(e.clientX));
   }, { passive: false });
   $('#zoomIn').onclick = () => zoom(0.5);
   $('#zoomOut').onclick = () => zoom(2);

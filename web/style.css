@@ -150,7 +150,11 @@ input[type=search]::placeholder { color: var(--muted); }
   padding: 1px 7px; border-radius: 4px; color: #10161d; font-weight: 700; }
 .wf-hover { position: absolute; top: 28px; padding: 2px 7px; border-radius: 4px; pointer-events: none; background: #000b;
   font-size: 12px; font-variant-numeric: tabular-nums; display: none; transform: translateX(-50%); white-space: nowrap; }
-.zoom { position: absolute; right: 8px; bottom: 8px; display: flex; gap: 2px; background: #0D151Dcc; border-radius: 6px; padding: 2px; }
+#cmdBar .zoom { gap: 6px; }
+.zbtn { min-width: 32px; height: 28px; padding: 0 8px; border-radius: 6px; font-weight: 700; color: #F2D78A; text-transform: none; letter-spacing: 0;
+  background: linear-gradient(180deg, #3A4756, #26313D); border: 1px solid #5C4A24; }
+.zbtn:hover { border-color: var(--gold); }
+.zbtn.wide { font-size: 12px; }
 .wf-overlay { position: absolute; inset: 0; display: grid; place-items: center; background: #0D151Dd9; text-align: center; }
 .wf-overlay p { color: var(--muted); font-size: 15px; max-width: 52ch; }
 

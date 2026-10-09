@@ -51,7 +51,7 @@
     <div class="search"><input id="modeSearch" type="search" placeholder="Chercher un mode…" autocomplete="off" spellcheck="false"></div>
     <nav id="modeList"></nav>
     <p class="hint" id="placeHint">Choisissez un mode, puis cliquez sur un signal dans le waterfall pour ouvrir un canal.</p>
-    <p class="hint keys">Molette : accorde le canal actif (Maj : 1 Hz, Alt : 100 Hz). Ctrl+molette : zoom.</p>
+    <p class="hint keys">Molette sur le waterfall : zoom. Ctrl+molette : accorde le canal actif (Maj : 1 Hz, Alt : 100 Hz). Molette sur le spectre d'un canal : accord.</p>
   </aside>
 
   <main id="main">
@@ -60,11 +60,6 @@
       <div id="bmRibbon" aria-label="Signets"></div>
       <div id="markers"></div>
       <div id="wfHover" class="wf-hover"></div>
-      <div class="zoom">
-        <button id="zoomOut" class="icon-btn small" title="Dézoomer">−</button>
-        <button id="zoomIn" class="icon-btn small" title="Zoomer">+</button>
-        <button id="zoomAll" class="icon-btn small" title="Toute la bande">Tout</button>
-      </div>
       <div id="wfOverlay" class="wf-overlay"><p>Connexion au serveur…</p></div>
     </section>
 
@@ -77,6 +72,12 @@
         <option value="braise">Braise</option><option value="gris">Niveaux de gris</option></select></label>
       <label class="cmd" title="Contraste du waterfall">Contraste<input id="setContrast" type="range" min="0.5" max="2.5" step="0.1" value="1"></label>
       <label class="cmd" title="Plancher du waterfall (niveau du bruit)">Plancher<input id="setFloor" type="range" min="-30" max="30" step="1" value="0"></label>
+      <span class="cmd-sep"></span>
+      <div class="cmd zoom" title="Zoom du waterfall (ou molette de la souris sur le waterfall)">Zoom
+        <button id="zoomOut" class="zbtn" type="button" title="Dézoomer">−</button>
+        <button id="zoomIn" class="zbtn" type="button" title="Zoomer">+</button>
+        <button id="zoomAll" class="zbtn wide" type="button" title="Toute la bande">Tout</button>
+      </div>
     </section>
 
     <section id="chanWrap">
