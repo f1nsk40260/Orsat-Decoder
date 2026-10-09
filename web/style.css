@@ -459,3 +459,13 @@ dialog.cmp { width: min(1180px, 96vw); max-height: 94vh; overflow-y: auto; }
 .lib-row .dir-name { opacity: .85; font-weight: 400; }
 .dir-legend .lib { color: var(--muted); }
 .dir-sec .grp .grp-n { color: var(--muted); font-weight: 400; text-transform: none; letter-spacing: 0; font-size: 12px; }
+
+/* bouton d'écoute : haut-parleur (ondes visibles quand l'écoute est active) */
+.icon-btn.listen { padding: 2px 6px; }
+.icon-btn.listen .spk { width: 20px; height: 20px; }
+.icon-btn.listen .spk-body { fill: currentColor; stroke: none; }
+.icon-btn.listen .spk-w1, .icon-btn.listen .spk-w2 { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; opacity: .35; }
+.icon-btn.listen:hover .spk-w1, .icon-btn.listen:hover .spk-w2 { opacity: .8; }
+.icon-btn.listen.on .spk-w1, .icon-btn.listen.on .spk-w2 { opacity: 1; animation: spkPulse 1s ease-in-out infinite; }
+.icon-btn.listen.on .spk-w2 { animation-delay: .25s; }
+@keyframes spkPulse { 50% { opacity: .3; } }

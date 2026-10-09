@@ -65,10 +65,24 @@ def load_conf():
     c.setdefault("source", c["sources"][0]["id"])
     c.setdefault("channels", [])
     c.setdefault("ui", {})
-    if "bookmarks" not in c:                      # premiers signets : les fréquences préréglées
+    done = c.setdefault("migrations", [])
+    if "bookmarks" not in c:                      # premières mémoires : les fréquences préréglées
         from .modes import PRESETS
         c["bookmarks"] = [{"label": p["label"], "mode": p["mode"], "freq": p["freq"], "ribbon": True,
                            **({"params": p["params"]} if p.get("params") else {})} for p in PRESETS]
+        done.append("sstv_center")                # déjà au nouveau format
+    if "sstv_center" not in done:
+        # SSTV : la fréquence d'une mémoire est désormais le centre du signal (avant : celle du cadran),
+        # et celle d'un canal aussi (avant : le palier VIS à 1900 Hz audio)
+        for b in c["bookmarks"]:
+            if b.get("mode") == "sstv":
+                b["freq"] = b["freq"] - 1700 if b["freq"] < 10e6 else b["freq"] + 1700
+        for ch in c["channels"]:
+            if ch.get("mode") == "sstv":
+                ch["freq"] = ch.get("freq", 0) - 200
+        done.append("sstv_center")
+        if CONF_FILE.exists():
+            save_conf(c)                          # migration faite une fois pour toutes
     return c
 
 
@@ -246,7 +260,8 @@ class Channel:
         if self.decoder is None or fs != self.fs:
             self.fs = fs
             # « _src » : type de source, pour les décodeurs qui doivent défaire un traitement du serveur
-            self.decoder = self.mode["make"](fs, self.app.src.decoder_af(self), {**self.params, "_src": self.app.src.kind})
+            self.decoder = self.mode["make"](fs, self.app.src.decoder_af(self), {**self.params, "_src": self.app.src.kind,
+                                                                                    "_rf": self.app.src.chan_freq(self)})
             if self.mode.get("kind") == "ident":
                 self.decoder.rf = self.app.src.chan_freq(self)     # fréquence radio, si la source la connaît
             if self.state in ("connexion", "reconnexion"):

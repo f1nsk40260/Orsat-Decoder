@@ -92,7 +92,13 @@ class SSTV(Decoder):
     name = "SSTV"
     kind = "img"
 
-    def __init__(self, fs, af=1900.0, mode="auto", timeout=4.0, span=100.0):
+    def __init__(self, fs, af=1900.0, mode="auto", timeout=4.0, span=100.0, center=False, reverse=False):
+        # center : af est le centre du signal (1700 Hz nominal) et non le palier VIS (1900 Hz) ; c'est la
+        # fréquence qu'un clic au milieu du signal donne. reverse : spectre retourné (signal BLI démodulé en BLU),
+        # retourné de nouveau ici autour du centre.
+        self.center, self.reverse = bool(center), bool(reverse)
+        if self.center:
+            af = float(af) + 200.0
         super().__init__(fs, af)
         self.force = None if mode in (None, "auto") else mode
         self.timeout = float(timeout)
@@ -135,12 +141,16 @@ class SSTV(Decoder):
         self.present = 0.0 if ratio > 1.3 else self.present + len(raw) / self.fs
 
     def set_af(self, af):
+        if self.center:
+            af = float(af) + 200.0
         super().set_af(af)
         self.af0 = float(af)
         self.dem.fc = af - 200.0
 
     def status(self):
-        st = {"af": round(float(self.af0 + self.off), 1), "snr": round(float(self.snr), 1),
+        # position affichée : centre du signal (ou palier VIS), décalage mesuré compris, dans l'audio réel
+        pos = (self.af0 - 200.0) + (-self.off if self.reverse else self.off) + (0.0 if self.center else 200.0)
+        st = {"af": round(float(pos), 1), "snr": round(float(self.snr), 1),
               "sync": 1 if self.state == "rx" else 0,
               "mode": SSTV_MODES[self.mode]["name"] if self.mode else "attente VIS"}
         if self.state == "rx":
@@ -159,6 +169,8 @@ class SSTV(Decoder):
         f, z = self.dem.process(x)
         if len(f) == 0:
             return []
+        if self.reverse:                     # retournement autour de dem.fc (1700 Hz nominal)
+            f, z = -f, np.conj(z)
         fn = f + np.float32(self.dem.fc - (self.af0 - 1900.0))
         self._fn.append(fn)
         self._zb.append(z)
@@ -213,23 +225,31 @@ class SSTV(Decoder):
         nb = (self.n - a0) // B
         if nb < 120:
             return
-        e19 = self._tone(a0, a0 + nb * B, 1900.0, B)
-        e12 = self._tone(a0, a0 + nb * B, 1200.0, B)
-        r = e19 / (e19 + e12 + 1e-12)
-        C = np.concatenate([[0], np.cumsum(r)])
+        # repérage grossier sous plusieurs décalages (cases de 5 ms : ±100 Hz chacune) ; _vis_at mesure ensuite
+        # le décalage exact. Sans cela, un signal à plus de 100 Hz de la position attendue n'était jamais vu.
         found = None
-        for j in range(56, nb - 62):
-            if a0 + j * B < a:
-                continue
-            lead = (C[j - 2] - C[j - 52]) / 50
-            if lead < 0.65:
-                continue
-            st = (C[j + 5] - C[j + 1]) / 4
-            if st > 0.35:
-                continue
-            res = self._vis_at(a0 + j * B, B)
-            if res is not None:
-                found = res
+        offs = [0.0] + [s * d for d in np.arange(100.0, self.span + 1, 100.0) for s in (1, -1)]
+        tried = set()
+        for o in offs:
+            e19 = self._tone(a0, a0 + nb * B, 1900.0 + o, B)
+            e12 = self._tone(a0, a0 + nb * B, 1200.0 + o, B)
+            r = e19 / (e19 + e12 + 1e-12)
+            C = np.concatenate([[0], np.cumsum(r)])
+            for j in range(56, nb - 62):
+                if a0 + j * B < a or j in tried:
+                    continue
+                lead = (C[j - 2] - C[j - 52]) / 50
+                if lead < 0.65:
+                    continue
+                st = (C[j + 5] - C[j + 1]) / 4
+                if st > 0.35:
+                    continue
+                tried.add(j)
+                res = self._vis_at(a0 + j * B, B)
+                if res is not None:
+                    found = res
+                    break
+            if found is not None:
                 break
         self.scan_pos = max(self.scan_pos, a0 + max(0, nb - 62) * B)
         if found is not None:

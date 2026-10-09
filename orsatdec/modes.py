@@ -164,7 +164,10 @@ MODES += [
                 {"key": "lpm", "label": "Lignes/min", "opts": [[60, "60"], [90, "90"], [120, "120"], [240, "240"]], "def": 120}],
      "make": lambda fs, af, p: WeFax(fs, af, ioc=p.get("ioc", 576), lpm=p.get("lpm", 120))},
     {"id": "sstv", "label": "SSTV", "family": "Images", "kind": "img", "desc": "Martin, Scottie, Robot, PD, Wraase ; code VIS automatique.",
-     "af": 1900, "bw": 1300, "make": lambda fs, af, p: SSTV(fs, af)},
+     # fréquence du canal = centre du signal (1100–2300 Hz, centre 1700) : là où tombe un clic sur le signal
+     "af": 1700, "bw": 1300,
+     "params": [{"key": "side", "label": "Bande", "opts": [["auto", "Auto"], ["usb", "BLU (USB)"], ["lsb", "BLI (LSB)"]], "def": "auto"}],
+     "make": lambda fs, af, p: SSTV(fs, af, center=True, span=350.0, reverse=_sstv_lsb(p))},
     {"id": "hell", "label": "Hellschreiber", "family": "Images", "kind": "img", "desc": "Feld Hell et variantes, lecture à l'œil.",
      "af": 1000, "bw": 300,
      "params": [{"key": "mode", "label": "Variante", "opts": [["feld", "Feld Hell"], ["slow", "Slow Hell"], ["x5", "Hell X5"], ["x9", "Hell X9"],
@@ -303,8 +306,8 @@ PRESETS = [
     {"label": "Fax DWD 7880 kHz", "mode": "wefax", "freq": 7880000},
     {"label": "Fax DWD 13882,5 kHz", "mode": "wefax", "freq": 13882500},
     {"label": "Fax Northwood 8040 kHz", "mode": "wefax", "freq": 8040000},
-    {"label": "SSTV 40 m", "mode": "sstv", "freq": 7165000},
-    {"label": "SSTV 20 m", "mode": "sstv", "freq": 14230000},
+    {"label": "SSTV 40 m", "mode": "sstv", "freq": 7163300},
+    {"label": "SSTV 20 m", "mode": "sstv", "freq": 14231700},
     {"label": "Olivia 8/250 40 m", "mode": "olivia", "freq": 7072500, "params": {"tones": 8, "bw": 250}},
     {"label": "APRS 144,800 MHz", "mode": "packet1200", "freq": 144800000},
     {"label": "HFDL Shannon 5547 kHz", "mode": "hfdl", "freq": 5548440},
@@ -337,6 +340,16 @@ PRESETS = [
     {"label": "Olivia 8/250 20 m", "mode": "olivia", "freq": 14072500, "params": {"tones": 8, "bw": 250}},
     {"label": "Olivia 32/1000 20 m", "mode": "olivia", "freq": 14075400, "params": {"tones": 32, "bw": 1000}},
 ]
+
+
+def _sstv_lsb(p):
+    """SSTV : le signal est-il en BLI ? Auto : sous 10 MHz sur un WebSDR (Orsat-Decoder y démodule en BLU),
+    jamais sur un transceiver (TCI, entrée audio : son propre mode BLI rend un audio déjà à l'endroit)."""
+    side = p.get("side", "auto")
+    if side in ("usb", "lsb"):
+        return side == "lsb"
+    rf = p.get("_rf") or 0
+    return p.get("_src") in ("phantom", "kiwi", "owrx") and 0 < rf < 10e6
 
 
 def directory():

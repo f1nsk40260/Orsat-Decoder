@@ -457,7 +457,9 @@ function buildCard(c) {
     if (!isNaN(v)) send({ t: 'retune', ch: c.id, freq: audioOnly() ? v : v * 1000 });
   };
   freq.onkeydown = e => { if (e.key === 'Enter') freq.blur(); };
-  const listen = el('button', { class: 'icon-btn small listen', type: 'button', title: 'Écouter l\'audio reçu par ce canal', text: 'Écouter' });
+  const listen = el('button', { class: 'icon-btn small listen', type: 'button', title: 'Écouter l\'audio reçu par ce canal',
+    'aria-label': 'Écouter l\'audio reçu par ce canal' });
+  listen.innerHTML = SPEAKER_SVG;
   listen.onclick = () => toggleListen(c);
   const pause = el('button', { class: 'icon-btn small', type: 'button', title: 'Pause' });
   pause.onclick = () => send({ t: 'pause', ch: c.id, paused: !c.paused });
@@ -1298,6 +1300,8 @@ function wfResize() {
 function fmtKHz(f) { return (f / 1000).toLocaleString('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 3 }); }
 const audioOnly = () => !!(S.server && S.server.shared && S.server.nodial);
 function fmtF(f) { return audioOnly() ? `${Math.round(f)} Hz` : `${fmtKHz(f)} kHz`; }
+const SPEAKER_SVG = '<svg class="spk" viewBox="0 0 24 24" aria-hidden="true"><path class="spk-body" d="M4 9.5h3.2L12 5.2v13.6l-4.8-4.3H4z"/>'
+  + '<path class="spk-w1" d="M15 9.2a4 4 0 0 1 0 5.6"/><path class="spk-w2" d="M17.6 6.6a7.6 7.6 0 0 1 0 10.8"/></svg>';
 function niceStep(span, px) {
   const target = span / Math.max(2, px / 110);
   const p = Math.pow(10, Math.floor(Math.log10(target)));
@@ -1309,12 +1313,26 @@ function drawScale() {
   const { ctx, w, scaleH, dpr } = WF, [f0, f1] = S.view;
   ctx.fillStyle = '#141E28'; ctx.fillRect(0, 0, w, scaleH);
   const step = niceStep(f1 - f0, w / dpr * 0.8);     // libellés plus gros : un peu plus espacés
+  // graduations intermédiaires : 5 intervalles (pas en 1 ou 5), 4 (pas en 2) ou 5 (pas en 2,5), trait moyen à la moitié
+  const lead = Math.round(step / Math.pow(10, Math.floor(Math.log10(step))) * 10) / 10;
+  const nsub = lead === 2 ? 4 : 5, sub = step / nsub;
+  const xOf = f => Math.round((f - f0) / (f1 - f0) * w) + .5;
+  ctx.lineWidth = dpr;
+  for (let k = Math.ceil(f0 / sub); k * sub <= f1; k++) {
+    const r = ((k % nsub) + nsub) % nsub;
+    if (r === 0) continue;
+    const half = nsub === 4 && r === 2;
+    const x = xOf(k * sub);
+    ctx.strokeStyle = half ? '#39FF14d0' : '#39FF1499';
+    ctx.beginPath(); ctx.moveTo(x, scaleH); ctx.lineTo(x, scaleH - (half ? 7 : 5) * dpr); ctx.stroke();
+  }
   ctx.font = `700 ${13.5 * dpr}px "Ubuntu Mono", "DejaVu Sans Mono", monospace`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   for (let f = Math.ceil(f0 / step) * step; f <= f1; f += step) {
-    const x = Math.round((f - f0) / (f1 - f0) * w) + .5;
-    ctx.strokeStyle = '#39FF14aa'; ctx.lineWidth = dpr; ctx.beginPath(); ctx.moveTo(x, scaleH); ctx.lineTo(x, scaleH - 6 * dpr); ctx.stroke();
+    const x = xOf(f);
+    ctx.strokeStyle = '#39FF14'; ctx.lineWidth = 1.5 * dpr; ctx.beginPath(); ctx.moveTo(x, scaleH); ctx.lineTo(x, scaleH - 9 * dpr); ctx.stroke();
+    ctx.lineWidth = dpr;
     ctx.shadowColor = '#39FF1466'; ctx.shadowBlur = 4 * dpr;
-    ctx.fillStyle = '#39FF14'; ctx.fillText(audioOnly() ? String(Math.round(f)) : fmtKHz(f), x, scaleH / 2 - 2 * dpr);
+    ctx.fillStyle = '#39FF14'; ctx.fillText(audioOnly() ? String(Math.round(f)) : fmtKHz(f), x, scaleH / 2 - 3 * dpr);
     ctx.shadowBlur = 0;
   }
   ctx.strokeStyle = '#2C3C4C'; ctx.beginPath(); ctx.moveTo(0, scaleH - .5); ctx.lineTo(w, scaleH - .5); ctx.stroke();
@@ -1476,8 +1494,9 @@ function initWaterfall() {
     } else if (m.kind === 'ident') {
       f = Math.round(snapFreq(f, 300, true));       // centre du signal sous le clic
     } else {
-      const fsk = m.bw_from === 'shift' || m.id === 'navtex';
-      f = Math.round(snapFreq(f, fsk ? 400 : (m.bw || 200), fsk));
+      // SSTV : barycentre de toute la bande 1100–2300 Hz (le pic peut être la synchro à 1200 Hz)
+      const fsk = m.bw_from === 'shift' || m.id === 'navtex' || m.id === 'sstv';
+      f = Math.round(snapFreq(f, m.id === 'sstv' ? 1300 : fsk ? 400 : (m.bw || 200), fsk));
     }
     addChannel(m.id, f);
     setArmed(false);
