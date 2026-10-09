@@ -3,7 +3,7 @@
 ![Version](https://img.shields.io/badge/version-Beta%201.0.0-orange) ![Licence](https://img.shields.io/badge/licence-GPL--3.0-blue) ![Linux](https://img.shields.io/badge/plateforme-Linux-lightgrey)
 
 **Décodeur multimode pour Linux**, en réception uniquement. Il reçoit l'audio d'un récepteur web
-(PhantomSDR / Orsat-SDR, KiwiSDR, OpenWebRX), d'un récepteur TCI ou de la carte son, et décode
+(PhantomSDR / Orsat-SDR, KiwiSDR, OpenWebRX, UberSDR), d'un récepteur TCI ou de la carte son, et décode
 plusieurs canaux en même temps. Il sait aussi reconnaître un signal inconnu et ouvrir le bon décodeur.
 
 ![Orsat-Decoder : trois canaux CW, PSK31 et RTTY décodés en même temps sur la bande des 40 m](docs/images/interface.jpg)
@@ -21,7 +21,7 @@ Désinstallation : `~/Orsat-Decoder/uninstall.sh`.
 
 - **Plus de 90 modes** en réception (tableau ci-dessous).
 - **Plusieurs canaux simultanés**, chacun avec son mode, sa fréquence, son mini-spectre et son texte.
-- **Récepteurs web** : PhantomSDR / Orsat-SDR, KiwiSDR et OpenWebRX, avec un flux audio par canal,
+- **Récepteurs web** : PhantomSDR / Orsat-SDR, KiwiSDR, OpenWebRX et UberSDR, avec un flux audio par canal,
   accordé indépendamment dans la bande du serveur.
 - **Récepteurs locaux** : TCI (audio et fréquence du récepteur), entrée audio avec CAT rigctld facultatif.
 - **Carnet de serveurs** : on ajoute l'adresse d'un récepteur web, son type est reconnu tout seul, et il
@@ -75,6 +75,7 @@ pause, effacement, enregistrement du texte, écoute de l'audio du décodeur.
 | PhantomSDR / Orsat-SDR | toute la bande du serveur | souvent 3 auditeurs par adresse IP |
 | KiwiSDR | 0 à 30 MHz | 4 à 8 canaux par Kiwi ; le waterfall et chaque canal en occupent un |
 | OpenWebRX | bande du profil en cours | le second sélecteur en haut change de profil, pour tous les auditeurs du récepteur |
+| UberSDR | 10 kHz à 30 MHz (ou plus) | adresse de la page du récepteur (…/v2/ convient) ; en général 2 canaux, le serveur limite à deux utilisateurs par adresse IP |
 
 Les WebSDR de websdr.org utilisent un format audio fermé : pour eux, écoutez dans le navigateur et
 choisissez la source **Entrée audio** sur le « Monitor » de la carte son.

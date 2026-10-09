@@ -1,13 +1,15 @@
-"""Faux serveurs KiwiSDR et OpenWebRX pour les essais, sur la même bande synthétique que fake_tci.py
+"""Faux serveurs KiwiSDR, OpenWebRX et UberSDR pour les essais, sur la même bande synthétique que fake_tci.py
 (PSK31, RTTY et CW vers 7070 kHz).
 
     python tests/fake_websdr.py kiwi [port]     (défaut 8073)
     python tests/fake_websdr.py owrx [port]     (défaut 8074)
+    python tests/fake_websdr.py uber [port]     (défaut 8080)
 
 FAKE_KIWI_PASS=… impose un mot de passe ; FAKE_KIWI_SLOTS=n limite le nombre de connexions (défaut 4).
 Le faux Kiwi envoie l'audio non compressé si on le demande (SET compression=0), sinon en IMA ADPCM.
 """
 import asyncio
+import gzip
 import json
 import os
 import struct
@@ -21,6 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from fake_tci import Air, FS, STATIONS  # noqa: E402
 from orsatdec.adpcm import encode  # noqa: E402
+import zstandard as zstd  # noqa: E402
 
 BLOCK = FS // 20
 
@@ -144,6 +147,138 @@ class Kiwi:
         task.cancel()
 
 
+# ===================================================================================== UberSDR
+class Uber:
+    """Protocole natif d'UberSDR : /api/description, POST /connection, /ws (pcm-zstd v3), /ws/user-spectrum
+    (SPEC v2). Comme un vrai serveur : 2 UUID par adresse IP, un flux audio par UUID (le nouveau remplace)."""
+    MAX_UUID_IP = int(os.environ.get("FAKE_UBER_UUIDS", 2))
+
+    def __init__(self):
+        self.known = {}          # uuid -> User-Agent annoncé par /connection
+        self.audio = {}          # uuid -> ws audio en cours
+        self.zc = zstd.ZstdCompressor()
+
+    async def description(self, request):
+        return web.json_response({"receiver": {"name": "UberSDR de démo"}, "description": "UberSDR de démo",
+                                  "tuning_range": {"min_frequency": 10000, "max_frequency": 30000000,
+                                                   "spectrum_span_hz": 30000000}, "public_uuid": "x", "version": "0.1.66"})
+
+    async def status(self, request):            # imite OpenWebRX, comme le vrai
+        return web.json_response({"receiver": {"name": "UberSDR de démo"}, "max_clients": 20, "version": "0.1.66",
+                                  "sdrs": [{"name": "UberSDR", "type": "SDR", "profiles": []}]})
+
+    async def connection(self, request):
+        d = await request.json()
+        uid = d.get("user_session_id", "")
+        live = {u for u in self.known}
+        if uid not in live and len(live) >= self.MAX_UUID_IP:
+            return web.json_response({"allowed": False, "reason": f"maximum unique users per IP reached ({self.MAX_UUID_IP})"})
+        self.known[uid] = request.headers.get("User-Agent", "")
+        return web.json_response({"allowed": True, "bypassed": False, "allowed_iq_modes": [], "max_session_time": 0})
+
+    def _check(self, request):
+        uid = request.query.get("user_session_id", "")
+        if uid not in self.known or self.known[uid] != request.headers.get("User-Agent", ""):
+            return None
+        return uid
+
+    async def ws_audio(self, request):
+        ws = web.WebSocketResponse()
+        await ws.prepare(request)
+        uid = self._check(request)
+        if uid is None:
+            await ws.send_str(json.dumps({"type": "error", "error": "Session not registered: call /connection first"}))
+            await ws.close()
+            return ws
+        old = self.audio.get(uid)
+        if old is not None and not old.closed:
+            await old.close()                    # un flux audio par UUID : le nouveau remplace
+        self.audio[uid] = ws
+        q = request.query
+        st = {"dial": int(q.get("frequency", 7_069_000)), "mode": q.get("mode", "usb")}
+        air = Air()
+
+        async def stream():
+            first = True
+            while not ws.closed:
+                x = air.block(st["dial"], BLOCK)
+                pcm = np.clip(x * 32767, -32768, 32767).astype(">i2").tobytes()
+                if first:
+                    hdr = struct.pack("<HBBQQIBfffI"[:-1], 0x5043, 3, 2, 0, 0, FS, 1, -60.0, -110.0, 0)
+                    first = False
+                else:
+                    hdr = struct.pack("<HBQH", 0x504D, 3, 0, 0)
+                await ws.send_bytes(self.zc.compress(hdr + pcm))
+                await asyncio.sleep(BLOCK / FS)
+
+        task = asyncio.create_task(stream())
+        try:
+            async for msg in ws:
+                if msg.type != WSMsgType.TEXT:
+                    continue
+                m = json.loads(msg.data)
+                if m.get("type") == "tune":
+                    st["dial"] = int(m.get("frequency", st["dial"]))
+                    st["mode"] = m.get("mode", st["mode"])
+        finally:
+            task.cancel()
+            if self.audio.get(uid) is ws:
+                del self.audio[uid]
+                self.known.pop(uid, None)        # plus aucun flux : l'UUID est libéré
+        return ws
+
+    async def ws_spectrum(self, request):
+        ws = web.WebSocketResponse()
+        await ws.prepare(request)
+        if self._check(request) is None:
+            await ws.send_bytes(gzip.compress(json.dumps({"type": "error", "error": "Session not registered"}).encode()))
+            await ws.close()
+            return ws
+        st = {"cf": 15_000_000.0, "bbw": 30e6 / 1024}
+        rng = np.random.default_rng(3)
+
+        async def config():
+            await ws.send_bytes(gzip.compress(json.dumps({"type": "config", "centerFreq": int(st["cf"]), "binCount": 1024,
+                                                          "binBandwidth": st["bbw"], "totalBandwidth": st["bbw"] * 1024}).encode()))
+
+        async def stream():
+            seq, prev = 0, None
+            while not ws.closed:
+                span = st["bbw"] * 1024
+                db = fake_spectrum(st["cf"] - span / 2, st["cf"] + span / 2, 1024, rng)
+                ref, step = -16000, 60                       # dB = (ref + code × step) / 100
+                codes = np.clip(np.round((db * 100 - ref) / step), 0, 255).astype(np.uint8)
+                head = b"SPEC" + struct.pack("<BBHQQ", 2, 0, seq & 0xFFFF, 0, int(st["cf"]))
+                if prev is None or seq % 10 == 0:
+                    body = struct.pack("<hB", ref, step) + codes.tobytes()
+                    head = head[:5] + b"\x05" + head[6:]
+                else:
+                    ch = codes != prev
+                    body = np.packbits(ch, bitorder="little").tobytes() + codes[ch].tobytes()
+                    head = head[:5] + b"\x06" + head[6:]
+                prev = codes
+                await ws.send_bytes(head + body)
+                seq += 1
+                await asyncio.sleep(0.1)
+
+        await config()
+        task = asyncio.create_task(stream())
+        try:
+            async for msg in ws:
+                if msg.type != WSMsgType.TEXT:
+                    continue
+                m = json.loads(msg.data)
+                if m.get("type") in ("zoom", "pan"):
+                    if m.get("frequency"):
+                        st["cf"] = float(m["frequency"])
+                    if m.get("binBandwidth"):
+                        st["bbw"] = max(1.0, float(m["binBandwidth"]))
+                    await config()
+        finally:
+            task.cancel()
+        return ws
+
+
 # ===================================================================================== OpenWebRX
 PROFILES = {"rtl|40m": ("40 m", 7_070_000, 48_000), "rtl|20m": ("20 m", 14_070_000, 48_000)}
 
@@ -232,9 +367,17 @@ class Owrx:
 
 def main():
     kind = sys.argv[1] if len(sys.argv) > 1 else "kiwi"
-    port = int(sys.argv[2]) if len(sys.argv) > 2 else (8073 if kind == "kiwi" else 8074)
+    port = int(sys.argv[2]) if len(sys.argv) > 2 else {"kiwi": 8073, "uber": 8080}.get(kind, 8074)
     app = web.Application()
-    if kind == "kiwi":
+    if kind == "uber":
+        u = Uber()
+        app.router.add_get("/api/description", u.description)
+        app.router.add_get("/status.json", u.status)
+        app.router.add_post("/connection", u.connection)
+        app.router.add_get("/ws", u.ws_audio)
+        app.router.add_get("/ws/user-spectrum", u.ws_spectrum)
+        app.router.add_get("/v2/", lambda r: web.Response(text="<html><title>UberSDR</title></html>", content_type="text/html"))
+    elif kind == "kiwi":
         k = Kiwi()
         app.router.add_get("/status", k.status)
         app.router.add_get("/{ts}/{which:SND|W/F}", k.ws)

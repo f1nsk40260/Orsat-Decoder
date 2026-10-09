@@ -100,7 +100,7 @@ function onSource(info) {
     let label = s.name;
     if (s.kind === 'phantom') label += (s.rx_name ? ` · ${s.rx_name}` : '') + (s.codec ? ` · ${CODECS[s.codec] || s.codec}` : '');
     else if (s.kind === 'tci') label += s.device ? ` · ${s.device}` : '';
-    else if (s.kind === 'owrx' || s.kind === 'kiwi') label += s.rx_name ? ` · ${s.rx_name}` : '';
+    else if (s.kind === 'owrx' || s.kind === 'kiwi' || s.kind === 'uber') label += s.rx_name ? ` · ${s.rx_name}` : '';
     else if (s.nodial) label += ' · sans CAT, fréquences audio';
     setConn(s.error ? `${label} · ${s.error}` : label, s.error ? 'bad' : 'ok');
     $('#wfOverlay').hidden = true;
@@ -128,6 +128,7 @@ const SRC_FIELDS = {
   phantom: [['url', 'Adresse', 'http://orsat.ddns.net:8080']],
   kiwi: [['url', 'Adresse', 'http://exemple.org:8073'], ['password', 'Mot de passe (facultatif)', '']],
   owrx: [['url', 'Adresse', 'http://exemple.org:8073']],
+  uber: [['url', 'Adresse', 'http://exemple.org/'], ['password', 'Mot de passe (facultatif)', '']],
   tci: [['url', 'Adresse TCI', 'ws://127.0.0.1:50001'], ['trx', 'Récepteur (TRX)', '0']],
   audio: [['device', 'Entrée audio', ''], ['rigctl', 'CAT rigctld (facultatif)', '127.0.0.1:4532']],
 };
@@ -168,13 +169,13 @@ function renderSources() {
     list.append(box);
   });
 }
-const SRV_LABEL = { phantom: 'PhantomSDR / Orsat-SDR', kiwi: 'KiwiSDR', owrx: 'OpenWebRX' };
+const SRV_LABEL = { phantom: 'PhantomSDR / Orsat-SDR', kiwi: 'KiwiSDR', owrx: 'OpenWebRX', uber: 'UberSDR' };
 function srvAdd() {
   const dlg = $('#srvDialog');
   $('#srvUrl').value = ''; $('#srvName').value = ''; $('#srvPass').value = ''; $('#srvType').value = '';
   $('#srvMsg').textContent = 'Collez l\'adresse de la page web du récepteur. Le type est reconnu tout seul.';
   $('#srvMsg').className = 'hint'; $('#srvPassRow').hidden = true; $('#srvOk').disabled = false;
-  $('#srvType').onchange = () => { $('#srvPassRow').hidden = $('#srvType').value !== 'kiwi'; };
+  $('#srvType').onchange = () => { $('#srvPassRow').hidden = !['kiwi', 'uber'].includes($('#srvType').value); };
   for (const b of dlg.querySelectorAll('.srv-cancel')) b.onclick = () => { S.detectWait = null; dlg.close(); };
   const say = (t, bad) => { $('#srvMsg').textContent = t; $('#srvMsg').className = 'hint' + (bad ? ' bad' : ''); };
   $('#srvForm').onsubmit = e => {
@@ -185,7 +186,7 @@ function srvAdd() {
     const save = (type, name) => {
       const src = { id: Math.random().toString(36).slice(2, 8), type, url,
         name: $('#srvName').value.trim() || name || url.replace(/^[a-z]+:\/\//i, '').replace(/\/$/, '') };
-      if (type === 'kiwi') src.password = $('#srvPass').value;
+      if (type === 'kiwi' || type === 'uber') src.password = $('#srvPass').value;
       S.sources.push(src);
       send({ t: 'sources_set', sources: S.sources });
       send({ t: 'select_source', id: src.id });
@@ -411,6 +412,8 @@ function addChannel(mode, freq, params, replace) {
     toast(`${MAX_CH} canaux au maximum : fermez-en un pour en ouvrir un autre.`, 'error');
     return;
   }
+  if (s.kind === 'uber' && [...S.chans.keys()].filter(id => id !== replace).length >= 2)
+    toast('Attention : un UberSDR accepte en général 2 canaux par adresse IP. Si celui-ci est plein, ce canal attendra qu\'une place se libère.', 'error');
   send({ t: 'add', mode, freq, params, replace });
 }
 

@@ -104,6 +104,7 @@
     <ul class="hint src-help">
       <li><b>PhantomSDR / Orsat-SDR</b> : adresse du serveur, par exemple <code>http://orsat.ddns.net:8080</code>. Chaque canal a son propre accord, sur toute la bande du serveur.</li>
       <li><b>KiwiSDR</b> : adresse du Kiwi, par exemple <code>http://exemple.org:8073</code>, et son mot de passe s'il en a un. Chaque canal et le waterfall occupent chacun un des canaux du Kiwi (4 à 8 en général).</li>
+      <li><b>UberSDR</b> : adresse de la page du récepteur, par exemple <code>http://sdr.meucorp.net/v2/</code>. Toute la bande HF ; deux canaux en général (le serveur limite à deux utilisateurs par adresse IP).</li>
       <li><b>OpenWebRX</b> : adresse du serveur. Les canaux s'accordent dans la bande du profil en cours ; le second sélecteur en haut change de profil (pour tous les auditeurs de ce récepteur).</li>
       <li><b>TCI</b> : AetherSDR (réglage TCI, port 50001), ExpertSDR, Thetis… Audio et fréquence du récepteur passent par la même connexion.</li>
       <li><b>Entrée audio</b> : carte son du transceiver, ou sortie d'un logiciel (choisir son « Monitor »). Le CAT rigctld est facultatif : AetherSDR, rigctld et flrig l'offrent sur le port 4532.</li>
@@ -140,9 +141,10 @@
       <option value="phantom">PhantomSDR / Orsat-SDR</option>
       <option value="kiwi">KiwiSDR</option>
       <option value="owrx">OpenWebRX</option>
+      <option value="uber">UberSDR</option>
     </select></label>
     <label class="row">Nom<input id="srvName" maxlength="60" spellcheck="false" placeholder="nom affiché dans la liste"></label>
-    <label class="row" id="srvPassRow" hidden>Mot de passe<input id="srvPass" type="password" autocomplete="off" placeholder="si le Kiwi en demande un"></label>
+    <label class="row" id="srvPassRow" hidden>Mot de passe<input id="srvPass" type="password" autocomplete="off" placeholder="si le serveur en demande un"></label>
     <p id="srvMsg" class="hint"></p>
     <div class="row-btns">
       <span class="spacer"></span>

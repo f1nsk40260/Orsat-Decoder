@@ -2,8 +2,8 @@
 
 Deux familles :
 
-- Serveurs web (PhantomSource, KiwiSource, OwrxSource) : PhantomSDR-Plus / Orsat-SDR, KiwiSDR,
-  OpenWebRX. Waterfall fourni par le serveur ; chaque canal ouvre son propre flux audio, accordé
+- Serveurs web (PhantomSource, KiwiSource, OwrxSource, UberSource) : PhantomSDR-Plus / Orsat-SDR, KiwiSDR,
+  OpenWebRX, UberSDR. Waterfall fourni par le serveur ; chaque canal ouvre son propre flux audio, accordé
   indépendamment (un auditeur de plus pour le serveur).
 - Sources « audio partagé » (TciSource, PulseSource) : un seul flux audio (la sortie BLU d'un récepteur),
   partagé par tous les canaux, chacun calé sur sa propre fréquence audio. Le waterfall est calculé ici,
@@ -29,6 +29,7 @@ import aiohttp
 from .kiwi import KiwiAudio, KiwiWaterfall
 from .owrx import OwrxAudio, OwrxWaterfall
 from .phantom import AudioChannel, Waterfall
+from .uber import UberAudio, UberWaterfall, base_url as uber_base, new_uuid
 
 log = logging.getLogger("orsat.sources")
 
@@ -36,6 +37,7 @@ TYPES = {
     "phantom": "PhantomSDR / Orsat-SDR",
     "kiwi": "KiwiSDR",
     "owrx": "OpenWebRX",
+    "uber": "UberSDR",
     "tci": "TCI (AetherSDR, ExpertSDR, Thetis…)",
     "audio": "Entrée audio (PipeWire / PulseAudio)",
 }
@@ -669,6 +671,75 @@ class OwrxSource(KiwiSource):
 
 
 # =====================================================================================
+# UberSDR
+# =====================================================================================
+class UberSource(KiwiSource):
+    """UberSDR : 10 kHz à 30 MHz (ou plus), waterfall zoomable côté serveur. Un flux audio par identifiant
+    (UUID) ; le waterfall partage l'UUID du premier canal, chaque canal suivant en prend un nouveau
+    (2 par adresse IP sur un serveur réglé par défaut)."""
+    kind = "uber"
+
+    def __init__(self, app, conf):
+        super().__init__(app, conf)
+        self.uids = []               # identifiants de cette source : [0] porte aussi le waterfall
+        self.uid_of = {}             # id canal -> UUID de son flux audio
+        self.desc = {}
+
+    async def _describe(self):
+        try:
+            async with self.app.http.get(uber_base(self.url) + "/api/description",
+                                         timeout=aiohttp.ClientTimeout(total=8)) as r:
+                self.desc = await r.json(content_type=None) if r.status == 200 else {}
+        except Exception as e:
+            log.info("uber %s /api/description : %s", self.url, e)
+            self.desc = {}
+
+    async def start(self):
+        await self._describe()
+        tr = self.desc.get("tuning_range") or {}
+        fmin = float(tr.get("min_frequency") or 10e3)
+        fmax = float(tr.get("max_frequency") or 30e6)
+        if fmax <= fmin:
+            fmin, fmax = 10e3, 30e6
+        rx = self.desc.get("receiver") or {}
+        name = rx.get("name") if isinstance(rx, dict) else None
+        self.uids = [new_uuid()]
+        self.wf = UberWaterfall(self.url, uid=self.uids[0], password=self.conf.get("password", ""),
+                                on_line=self.app.wf_line, on_info=self._on_info, on_state=self._on_wf_state,
+                                session=self.app.http, fmin=fmin, fmax=fmax, name=name or self.desc.get("description"))
+        self.wf.start()
+
+    def _uid_for(self, ch):
+        used = set(self.uid_of.values())
+        uid = next((u for u in self.uids if u not in used), None)
+        if uid is None:
+            uid = new_uuid()
+            self.uids.append(uid)
+        self.uid_of[ch.id] = uid
+        return uid
+
+    def _audio(self, ch):
+        return UberAudio(self.url, ch.dial, ch.mode.get("demod", "USB"), uid=self._uid_for(ch),
+                         password=self.conf.get("password", ""), on_pcm=ch.feed,
+                         on_state=lambda s, i=None, ch=ch: self._on_state(ch, s, i), session=self.app.http)
+
+    async def detach(self, ch):
+        await super().detach(ch)
+        uid = self.uid_of.pop(ch.id, None)
+        if uid and uid != (self.uids[0] if self.uids else None) and uid in self.uids:
+            self.uids.remove(uid)            # le serveur libère cet identifiant quand son flux se ferme
+
+    def _on_state(self, ch, state, info):
+        if state == "error" and "maximum" in str((info or {}).get("error", "")).lower():
+            info = {**(info or {}), "error": "serveur UberSDR : limite d'utilisateurs par adresse IP atteinte "
+                                             "(2 canaux en général)"}
+        super()._on_state(ch, state, info)
+
+    def summary(self):
+        return {**super().summary(), "codec": "PCM zstd"}
+
+
+# =====================================================================================
 # Reconnaissance du type de serveur à partir de son adresse
 # =====================================================================================
 async def detect_type(session, url):
@@ -686,6 +757,16 @@ async def detect_type(session, url):
         except Exception:
             return None
 
+    # UberSDR d'abord : son /status.json imite celui d'OpenWebRX ; son API est à la racine du site
+    try:
+        async with session.get(uber_base(url) + "/api/description", timeout=timeout) as r:
+            if r.status == 200:
+                d = json.loads((await r.content.read(500_000)).decode("utf-8", "replace"))
+                if isinstance(d, dict) and ("tuning_range" in d or "public_uuid" in d or "cw_skimmer" in d):
+                    rx = d.get("receiver") if isinstance(d.get("receiver"), dict) else {}
+                    return "uber", rx.get("name") or None
+    except Exception:
+        pass
     st = await get("/status")
     if st and "status=" in st and ("users_max=" in st or "bands=" in st or "gps=" in st):
         name = re.search(r"^name=(.*)$", st, re.M)
@@ -695,6 +776,8 @@ async def detect_type(session, url):
         try:
             d = json.loads(js)
             if isinstance(d, dict) and ("receiver" in d or "sdrs" in d):
+                if any(isinstance(x, dict) and x.get("name") == "UberSDR" for x in d.get("sdrs") or []):
+                    return "uber", ((d.get("receiver") or {}).get("name") or None)
                 return "owrx", ((d.get("receiver") or {}).get("name") or None)
         except ValueError:
             pass
@@ -713,5 +796,5 @@ async def detect_type(session, url):
 
 
 def make_source(app, conf):
-    return {"phantom": PhantomSource, "kiwi": KiwiSource, "owrx": OwrxSource, "tci": TciSource,
+    return {"phantom": PhantomSource, "kiwi": KiwiSource, "owrx": OwrxSource, "uber": UberSource, "tci": TciSource,
             "audio": PulseSource}.get(conf.get("type"), PhantomSource)(app, conf)
