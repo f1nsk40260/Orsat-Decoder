@@ -27,6 +27,8 @@ from .modes import BY_ID, public_catalog, default_params, bandwidth
 from .images import ImageStore
 from .sources import make_source, list_audio_inputs, detect_type, TYPES
 
+MAX_CHANNELS = 3          # canaux de décodage ouverts en même temps (chacun prend un tiers de la largeur)
+
 HERE = Path(__file__).resolve().parent
 WEB = HERE.parent / "web"
 DATA = Path(os.environ.get("ORSAT_DATA", Path.home() / "Orsat-Decoder"))
@@ -424,6 +426,8 @@ class App:
         await self.src.start()
         rx = conf.get("rx")
         for c in self.conf.get("channels", []):
+            if len(self.channels) >= MAX_CHANNELS:
+                break
             if c.get("source") == conf["id"] and c.get("rx") == rx and c.get("mode") in BY_ID:
                 self._add_channel(c["mode"], freq=c.get("freq", 0), af=c.get("af"), params=c.get("params"),
                                   paused=c.get("paused", False), save=False)
@@ -477,8 +481,11 @@ class App:
         t = m.get("t")
         src = self.src
         if t == "add":
-            if m.get("mode") in BY_ID:
+            rep = m.get("replace")                     # canal remplacé (identification -> mode trouvé)
+            if m.get("mode") in BY_ID and await self._room(ws, rep):
                 self._add_channel(m["mode"], freq=float(m["freq"]), params=m.get("params"))
+                if rep in self.channels:
+                    await self.remove_channel(rep)
         elif t == "preset":
             await self._preset(ws, m)
         elif t == "remove":
@@ -580,6 +587,14 @@ class App:
         elif t == "quit":
             self.quit.set()
 
+    async def _room(self, ws, replace=None):
+        """Place pour un canal de plus ? (le canal remplacé ne compte pas)"""
+        if sum(1 for cid in self.channels if cid != replace) < MAX_CHANNELS:
+            return True
+        await self._send(ws, json.dumps({"t": "notice", "level": "error",
+            "text": f"{MAX_CHANNELS} canaux au maximum : fermez-en un pour en ouvrir un autre."}))
+        return False
+
     async def _preset(self, ws, m):
         """Fréquence connue : canal direct (PhantomSDR), ou réaccord du récepteur puis canal (TCI, CAT)."""
         mode = BY_ID.get(m.get("mode"))
@@ -587,6 +602,8 @@ class App:
             return
         f = float(m["freq"])
         src = self.src
+        if not await self._room(ws):
+            return
         if not src.shared:
             self._add_channel(mode["id"], freq=f, params=m.get("params"))
             return

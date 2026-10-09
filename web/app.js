@@ -12,6 +12,7 @@ const el = (tag, props = {}, ...kids) => {
   for (const c of kids) if (c != null) e.append(c);
   return e;
 };
+const MAX_CH = 3;            // canaux ouverts en même temps (le serveur applique la même limite)
 const COLORS = ['#C9A24A', '#4FB3BF', '#E07A5F', '#9B8AE6', '#7FB685', '#6FA8DC', '#D98CB3', '#B8C25A'];
 
 const S = {
@@ -44,7 +45,7 @@ const H = {
     if (m.version) { $('#ver').textContent = m.version; document.title = `Orsat-Decoder ${m.version}`; }
     S.catalog = m.catalog; S.byId = Object.fromEntries(m.catalog.modes.map(x => [x.id, x]));
     S.types = m.types; S.sources = m.sources; S.current = m.current;
-    Object.assign(S.ui, m.ui || {}); S.mode = S.ui.mode || 'psk31';
+    Object.assign(S.ui, m.ui || {}); S.mode = S.ui.mode && S.ui.mode !== 'ident' ? S.ui.mode : 'psk31';
     applyUi();
     for (const c of [...S.chans.keys()]) removeChanCard(c);
     m.channels.forEach(upsertChan);
@@ -79,7 +80,11 @@ function rxPulse() {
   $('#ledRx').classList.add('act');
   clearTimeout(rxTimer); rxTimer = setTimeout(() => $('#ledRx').classList.remove('act'), 1500);
 }
-function tickUtc() { $('#utc').textContent = new Date().toISOString().slice(11, 19); }
+function tickUtc() {
+  const d = new Date();
+  $('#utc').textContent = d.toISOString().slice(11, 19);
+  $('#loc').textContent = d.toLocaleTimeString('fr-FR', { hour12: false });
+}
 tickUtc(); setInterval(tickUtc, 1000);
 
 const CODECS = { pcm: 'PCM', flac: 'FLAC', opus: 'Opus' };
@@ -221,15 +226,16 @@ function renderModes() {
   const nav = $('#modeList'); nav.replaceChildren();
   let fam = null;
   for (const m of S.catalog.modes) {
+    if (m.kind === 'ident') continue;               // l'identification a son bouton sous le waterfall
     if (q && !norm(`${m.label} ${m.family} ${m.desc}`).includes(q)) continue;
     if (m.family !== fam) { fam = m.family; nav.append(el('div', { class: 'fam-name', text: fam })); }
     nav.append(el('button', { class: 'mode-btn' + (m.id === S.mode ? ' active' : ''), type: 'button',
-      onclick: () => { S.mode = m.id; S.ui.mode = m.id; savePrefs(); renderModes(); } },
+      onclick: () => { S.mode = m.id; S.ui.mode = m.id; setArmed(false); savePrefs(); renderModes(); } },
       m.label, m.desc ? el('span', { class: 'd', text: m.desc }) : null));
   }
   const m = S.byId[S.mode];
   const shared = S.server && S.server.shared;
-  $('#placeHint').textContent = !m ? '' : shared
+  $('#placeHint').textContent = S.armed ? 'Identification : cliquez sur le signal inconnu dans le waterfall.' : !m ? '' : shared
     ? `Mode choisi : ${m.label}. Cliquez sur un signal dans le waterfall audio : tous les canaux partagent l'audio de la source.`
     : `Mode choisi : ${m.label}. Cliquez sur un signal dans le waterfall pour ouvrir un canal.`;
 }
@@ -366,17 +372,17 @@ function usePreset(p) {
   if (S.server.shared) { send({ t: 'preset', mode: p.mode, freq: p.freq, params: p.params }); return; }
   addChannel(p.mode, p.freq, p.params);
 }
-function addChannel(mode, freq, params) {
+function addChannel(mode, freq, params, replace) {
   const s = S.server;
   if (!s.shared && s.basefreq != null && (freq < s.basefreq || freq > s.basefreq + s.total_bandwidth)) {
     toast(`${fmtKHz(freq)} kHz est hors de la bande de ce récepteur (${fmtKHz(s.basefreq)} à ${fmtKHz(s.basefreq + s.total_bandwidth)} kHz).`, 'error');
     return;
   }
-  if (s.kind === 'kiwi' && S.chans.size >= 3)
-    toast('Attention : un KiwiSDR n\'a en général que 4 à 8 canaux, et le waterfall en occupe déjà un. Si le Kiwi est plein, ce canal sera refusé.', 'error');
-  if (s.kind === 'phantom' && !s.local && S.chans.size >= 3)
-    toast('Attention : un serveur PhantomSDR-Plus limite en général à 3 auditeurs par adresse (per_ip). Au-delà, le canal peut être refusé. Lancer Orsat-Decoder sur la machine du serveur lève cette limite.', 'error');
-  send({ t: 'add', mode, freq, params });
+  if ([...S.chans.keys()].filter(id => id !== replace).length >= MAX_CH) {
+    toast(`${MAX_CH} canaux au maximum : fermez-en un pour en ouvrir un autre.`, 'error');
+    return;
+  }
+  send({ t: 'add', mode, freq, params, replace });
 }
 
 // ------------------------------------------------------------------ canaux
@@ -860,8 +866,7 @@ function fmtMeasure(m) {
 }
 function openFound(c, o) {
   if (!o) return;
-  addChannel(o.mode, o.freq, o.params);
-  send({ t: 'remove', ch: c.id });
+  addChannel(o.mode, o.freq, o.params, c.id);       // le canal d'identification cède sa place
 }
 function renderIdent(c, m) {
   const out = c.out; out.replaceChildren();
@@ -1176,7 +1181,7 @@ function initWaterfall() {
     const d = drag; drag = null;
     if (d.moved) { setView(S.view[0], S.view[1]); return; }
     if (!S.view || e.target.closest('.marker, .zoom, .wf-overlay') || !e.target.closest('#wfWrap')) return;
-    const m = S.byId[S.mode]; if (!m) return;
+    const m = S.byId[S.armed ? 'ident' : S.mode]; if (!m) return;
     let f = freqAtX(e.clientX);
     const hzPerPx = (S.view[1] - S.view[0]) / WF.c.getBoundingClientRect().width;
     if (!m.whole && hzPerPx > (m.kind === 'ident' ? 150 : 20)) {
@@ -1202,6 +1207,7 @@ function initWaterfall() {
       f = Math.round(snapFreq(f, fsk ? 400 : (m.bw || 200), fsk));
     }
     addChannel(m.id, f);
+    setArmed(false);
   });
   wrap.addEventListener('mousemove', e => {
     if (!S.view) return;
@@ -1219,6 +1225,15 @@ function initWaterfall() {
   $('#zoomIn').onclick = () => zoom(0.5);
   $('#zoomOut').onclick = () => zoom(2);
   $('#zoomAll').onclick = () => { const s = S.server; if (s.basefreq != null) setView(s.basefreq, s.basefreq + s.total_bandwidth); };
+}
+
+// ------------------------------------------------------------------ bandeau de commande
+function setArmed(on) {
+  S.armed = on;
+  const b = $('#identBtn');
+  b.classList.toggle('on', on); b.setAttribute('aria-pressed', on);
+  $('#wfWrap').classList.toggle('armed', on);
+  renderModes();
 }
 
 // ------------------------------------------------------------------ préférences, réglages, divers
@@ -1263,6 +1278,12 @@ function wire() {
   };
   document.addEventListener('click', e => { if (!e.target.closest('.menu-wrap')) $('#presetMenu').hidden = true; });
   $('#settingsBtn').onclick = () => { send({ t: 'audio_inputs' }); $('#settings').showModal(); };
+  $('#identBtn').onclick = () => {
+    if (!S.armed && S.chans.size >= MAX_CH) { toast(`${MAX_CH} canaux au maximum : fermez-en un pour identifier un signal.`, 'error'); return; }
+    setArmed(!S.armed);
+    if (S.armed) toast('Cliquez sur le signal à identifier dans le waterfall.');
+  };
+  addEventListener('keydown', e => { if (e.key === 'Escape' && S.armed) setArmed(false); });
   $('#setPalette').onchange = e => { S.ui.palette = e.target.value; buildLut(); savePrefs(); };
   $('#setContrast').oninput = e => { S.ui.contrast = +e.target.value; savePrefs(); };
   $('#setFloor').oninput = e => { S.ui.floor = +e.target.value; savePrefs(); };

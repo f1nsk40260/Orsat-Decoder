@@ -65,10 +65,11 @@ button { cursor: pointer; }
 .led.on i { background: #6CFF5A; box-shadow: 0 0 8px #6CFF5A, inset 0 -1px 2px #0006; }
 .led.bad i { background: #FF5A4A; box-shadow: 0 0 8px #FF5A4A; }
 .led.act i { background: #FFB347; box-shadow: 0 0 10px #FFB347; }
-.clock { display: flex; align-items: baseline; gap: 6px; padding: 6px 12px; border-radius: 6px; white-space: nowrap;
+.clocks { display: flex; flex-direction: column; gap: 3px; }
+.clock { display: flex; align-items: baseline; gap: 6px; padding: 3px 12px; border-radius: 6px; white-space: nowrap;
   background: #050807; border: 1px solid #3A4A5A; box-shadow: inset 0 2px 8px #000; }
 .clock span { font: 600 22px/1 var(--mono); color: #FFB347; text-shadow: 0 0 8px #FF9A1F, 0 0 2px #FFD08A; letter-spacing: .06em; }
-.clock small { color: #B77A2A; font: 600 11px var(--mono); }
+.clock small { color: #B77A2A; font: 600 11px var(--mono); min-width: 3ch; }
 #presetBtn { background: linear-gradient(180deg, #3A4756, #26313D); border-color: #5C4A24; color: #F2D78A; }
 #presetBtn:hover { border-color: #C9A24A; }
 /* écrans étroits : on garde l'essentiel */
@@ -105,18 +106,38 @@ select { background: var(--night); border: 1px solid var(--line); border-radius:
 .search { padding: 12px; }
 input[type=search] { width: 100%; background: var(--night); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
 input[type=search]::placeholder { color: var(--muted); }
-#modeList { overflow-y: auto; flex: 1; padding: 0 6px 10px;  }
+.modes-title { margin: 0; padding: 12px 14px 0; font-size: 13px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--gold); }
+/* ascenseur toujours visible et plus large (styles WebKit : on neutralise les propriétés standard qui les désactivent) */
+#modeList { overflow-y: scroll; flex: 1; padding: 0 4px 10px 6px; scrollbar-color: auto; scrollbar-width: auto; }
+#modeList::-webkit-scrollbar { width: 18px; }
+#modeList::-webkit-scrollbar-track { background: #0D151Dcc; border-radius: 9px; }
+#modeList::-webkit-scrollbar-thumb { background: #C9A24Abb; border-radius: 9px; border: 3px solid transparent; background-clip: padding-box; min-height: 48px; }
+#modeList::-webkit-scrollbar-thumb:hover { background: var(--gold); border-width: 2px; background-clip: padding-box; }
+@supports not selector(::-webkit-scrollbar) { #modeList { scrollbar-color: #C9A24A #0D151Dcc; } }
 .fam-name { color: var(--muted); font-size: 12px; font-weight: 700; margin: 10px 8px 4px; }
 .mode-btn { display: block; width: 100%; text-align: left; background: none; border: 0; border-radius: 6px;
-  padding: 5px 10px 5px 14px; position: relative; }
+  padding: 5px 10px 5px 14px; position: relative; color: var(--gold); font-weight: 700; }
 .mode-btn:hover { background: var(--raise); }
 .mode-btn.active { color: var(--gold); background: var(--gold-soft); }
 .mode-btn.active::before { content: ""; position: absolute; left: 4px; top: 7px; bottom: 7px; width: 3px; border-radius: 2px; background: var(--gold); }
-.mode-btn .d { display: block; font-size: 12px; color: var(--muted); }
+.mode-btn .d { display: block; font-size: 12px; color: var(--muted); font-weight: 400; }
 .hint { color: var(--muted); font-size: 12.5px; padding: 0 14px 14px; margin: 0; }
 
 /* ---------- waterfall ---------- */
-#main { grid-area: main; min-width: 0; min-height: 0; display: grid; grid-template-rows: minmax(220px, 42%) 1fr; }
+#main { grid-area: main; min-width: 0; min-height: 0; display: grid; grid-template-rows: minmax(220px, 42%) auto 1fr; }
+#cmdBar { display: flex; align-items: center; gap: 18px; padding: 6px 12px; flex-wrap: wrap;
+  background: linear-gradient(180deg, #26313D, #1A232D); border-bottom: 1px solid var(--line); box-shadow: inset 0 1px 0 #ffffff10; }
+.ident-btn { font-weight: 700; letter-spacing: .14em; font-size: 13px; padding: 5px 16px; border-radius: 6px; color: #F2D78A;
+  background: linear-gradient(180deg, #3A4756, #26313D); border: 1px solid #5C4A24; }
+.ident-btn:hover { border-color: var(--gold); }
+.ident-btn.on { color: #1A1206; background: linear-gradient(180deg, #F2D78A, #B58D36); border-color: #F2D78A;
+  box-shadow: 0 0 10px #C9A24A99; }
+.cmd-sep { width: 1px; align-self: stretch; background: var(--line); }
+.cmd { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+.cmd select { padding: 3px 6px; text-transform: none; letter-spacing: 0; font-size: 13px; }
+.cmd input[type=range] { accent-color: var(--gold); width: 140px; }
+#wfWrap.armed { cursor: help; box-shadow: inset 0 0 0 2px var(--gold); }
 #wfWrap { position: relative; background: #0D151D; border-bottom: 1px solid var(--line); overflow: hidden; cursor: crosshair; user-select: none; }
 #wf { width: 100%; height: 100%; display: block; }
 #markers { position: absolute; inset: 0; pointer-events: none; }
@@ -132,8 +153,10 @@ input[type=search]::placeholder { color: var(--muted); }
 .wf-overlay p { color: var(--muted); font-size: 15px; max-width: 52ch; }
 
 /* ---------- canaux ---------- */
-#chanWrap { position: relative; overflow-y: auto; padding: 12px;  }
-#chans { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 12px; }
+#chanWrap { position: relative; overflow: hidden; padding: 10px; min-height: 0; display: flex; flex-direction: column; }
+/* trois canaux au plus, chacun sur un tiers de la largeur du waterfall */
+#chans { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; flex: 1; min-height: 0; }
+#chans:empty { display: none; }
 .chan { background: var(--glass); backdrop-filter: blur(6px); border: 1px solid var(--line); border-radius: 10px; display: flex; flex-direction: column;
   height: 300px; overflow: hidden; border-top: 3px solid var(--c, var(--gold)); }
 .chan header { display: flex; align-items: center; gap: 10px; padding: 8px 10px 6px; flex-wrap: wrap; }
@@ -215,6 +238,7 @@ dialog code { color: var(--text); }
   #app { grid-template-columns: 1fr; grid-template-areas: "bar" "main"; }
   #modes { display: none; }
   #chans { grid-template-columns: 1fr; }
+  #chanWrap { overflow-y: auto; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 
@@ -244,7 +268,7 @@ dialog code { color: var(--text); }
 .spec-read { position: absolute; right: 16px; top: 3px; font-size: 11px; color: var(--muted); pointer-events: none; font-variant-numeric: tabular-nums; }
 .marker.active .band { opacity: .3; }
 .marker.active .edge { opacity: 1; border-left-style: solid; }
-.chan { height: 360px; }
+.chan { height: auto; min-height: 0; min-width: 0; }
 
 .chan .state.bad { color: var(--bad); font-weight: 700; }
 .icon-btn.listen.on { color: #10161d; background: var(--c); }
@@ -280,9 +304,8 @@ dialog code { color: var(--text); }
   padding: 14px 20px; width: fit-content; max-width: 90%; margin-left: auto; margin-right: auto; }
 
 /* ---------- carte HFDL ---------- */
-.chan.wide { grid-column: 1 / -1; height: auto !important; }
-.chan.wide .out { min-height: 160px; max-height: 260px; }
-.chan .map { height: 440px; flex: none; border-top: 1px solid var(--line); background: #0D151D; }
+.chan.wide .out { min-height: 80px; flex: 1 1 40%; }
+.chan .map { flex: 1 1 60%; min-height: 160px; border-top: 1px solid var(--line); background: #0D151D; }
 .chan .map[hidden] { display: none; }
 .plane-ico { color: var(--fluo); filter: drop-shadow(0 0 2px #000); }
 .plane-ico svg { fill: currentColor; display: block; }
@@ -334,7 +357,7 @@ dialog .hint.bad { color: var(--bad); }
 #srvDialog { width: min(560px, 94vw); }
 
 /* ---------- fax météo : grande fenêtre, redimensionnable ---------- */
-.chan.imgcard { grid-column: 1 / -1; height: 82vh; min-height: 360px; resize: vertical; }
+.chan.imgcard { min-height: 0; }
 .chan:fullscreen { height: 100vh; border-radius: 0; resize: none; background: #141E28; }
 .chan .out.img.native { overflow-x: auto; }
 .chan .out.img.native .pic canvas { width: auto; max-width: none; }
@@ -343,3 +366,5 @@ dialog .hint.bad { color: var(--bad); }
 /* ---------- traduction des bulletins météo (RTTY) ---------- */
 .chan .out .tr { color: #8FD3E0; font: 13.5px/1.45 var(--font); white-space: normal; margin: 0 0 4px 1.5em; }
 .icon-btn.rec.on { color: #fff; background: #C0392B; }
+
+@media (max-width: 900px) { .chan { height: 360px; } }

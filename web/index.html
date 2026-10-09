@@ -32,7 +32,10 @@
       <span class="led" id="ledCh" title="Canaux ouverts"><i></i><span><b id="nCh">0</b> canaux</span></span>
       <span class="led" id="ledRx" title="S'allume quand un décodeur reçoit du texte ou une image"><i></i>Décodage</span>
     </div>
-    <div class="clock" title="Heure UTC"><span id="utc">--:--:--</span><small>UTC</small></div>
+    <div class="clocks">
+      <div class="clock" title="Heure UTC"><span id="utc">--:--:--</span><small>UTC</small></div>
+      <div class="clock" title="Heure locale"><span id="loc">--:--:--</span><small>LOC</small></div>
+    </div>
 
     <div class="menu-wrap">
       <button id="presetBtn" class="btn" title="Signets : vos fréquences et les signaux identifiables">Signets</button>
@@ -44,6 +47,7 @@
   </header>
 
   <aside id="modes">
+    <h2 class="modes-title">Modes Disponibles</h2>
     <div class="search"><input id="modeSearch" type="search" placeholder="Chercher un mode…" autocomplete="off" spellcheck="false"></div>
     <nav id="modeList"></nav>
     <p class="hint" id="placeHint">Choisissez un mode, puis cliquez sur un signal dans le waterfall pour ouvrir un canal.</p>
@@ -62,6 +66,17 @@
         <button id="zoomAll" class="icon-btn small" title="Toute la bande">Tout</button>
       </div>
       <div id="wfOverlay" class="wf-overlay"><p>Connexion au serveur…</p></div>
+    </section>
+
+    <section id="cmdBar" aria-label="Commandes">
+      <button id="identBtn" class="ident-btn" type="button" aria-pressed="false"
+        title="Identifier un signal inconnu : cliquez ici, puis sur le signal dans le waterfall">IDENTIFIER</button>
+      <span class="cmd-sep"></span>
+      <label class="cmd" title="Palette de couleurs du waterfall">Palette<select id="setPalette">
+        <option value="cadran">Cadran (or)</option><option value="glace">Glace</option>
+        <option value="braise">Braise</option><option value="gris">Niveaux de gris</option></select></label>
+      <label class="cmd" title="Contraste du waterfall">Contraste<input id="setContrast" type="range" min="0.5" max="2.5" step="0.1" value="1"></label>
+      <label class="cmd" title="Plancher du waterfall (niveau du bruit)">Plancher<input id="setFloor" type="range" min="-30" max="30" step="1" value="0"></label>
     </section>
 
     <section id="chanWrap">
@@ -90,12 +105,6 @@
       <li><b>TCI</b> : AetherSDR (réglage TCI, port 50001), ExpertSDR, Thetis… Audio et fréquence du récepteur passent par la même connexion.</li>
       <li><b>Entrée audio</b> : carte son du transceiver, ou sortie d'un logiciel (choisir son « Monitor »). Le CAT rigctld est facultatif : AetherSDR, rigctld et flrig l'offrent sur le port 4532.</li>
     </ul>
-    <h3>Waterfall</h3>
-    <label class="row">Palette<select id="setPalette">
-      <option value="cadran">Cadran (or)</option><option value="glace">Glace</option>
-      <option value="braise">Braise</option><option value="gris">Niveaux de gris</option></select></label>
-    <label class="row">Contraste<input id="setContrast" type="range" min="0.5" max="2.5" step="0.1" value="1"></label>
-    <label class="row">Plancher<input id="setFloor" type="range" min="-30" max="30" step="1" value="0"></label>
     <h3>Application</h3>
     <div class="row-btns"><button type="button" id="quitBtn" class="btn danger">Quitter Orsat-Decoder</button></div>
   </form>
