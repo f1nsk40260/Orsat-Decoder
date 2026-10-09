@@ -155,8 +155,12 @@ input[type=search]::placeholder { color: var(--muted); }
 .marker .edge { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1px dashed; opacity: .7; }
 .marker .tag { position: absolute; top: 24px; left: 50%; transform: translateX(-50%); white-space: nowrap; font-size: 11.5px;
   padding: 1px 7px; border-radius: 4px; color: #10161d; font-weight: 700; }
-.wf-hover { position: absolute; top: 32px; padding: 2px 7px; border-radius: 4px; pointer-events: none; background: #000b;
-  font-size: 12px; font-variant-numeric: tabular-nums; display: none; transform: translateX(-50%); white-space: nowrap; }
+.wf-hover { position: absolute; top: 32px; padding: 3px 9px; border-radius: 5px; pointer-events: none; z-index: 4;
+  background: var(--fluo); color: #061400; border: 1px solid #C8FFB8; box-shadow: 0 0 10px #39FF1499, 0 2px 6px #000a;
+  font: 700 14px/1.2 var(--mono); font-variant-numeric: tabular-nums; display: none; transform: translateX(-50%); white-space: nowrap; }
+/* petite pointe vers le curseur */
+.wf-hover::before { content: ""; position: absolute; left: 50%; top: -6px; margin-left: -6px;
+  border: 6px solid transparent; border-top: 0; border-bottom-color: var(--fluo); }
 #cmdBar .zoom { gap: 6px; }
 .zbtn { min-width: 32px; height: 28px; padding: 0 8px; border-radius: 6px; font-weight: 700; color: #F2D78A; text-transform: none; letter-spacing: 0;
   background: linear-gradient(180deg, #3A4756, #26313D); border: 1px solid #5C4A24; }
